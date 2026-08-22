@@ -1,0 +1,24 @@
+[package]
+name = "impossivel"
+version = "0.1.0"
+description = "Study/OS — A personal learning workspace desktop app"
+authors = ["you"]
+edition = "2021"
+
+[lib]
+name = "impossivel_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+aes-gcm = "0.10"
+rand = "0.8"
