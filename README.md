@@ -74,6 +74,26 @@ src-tauri/target/release/bundle/
 
 ---
 
+## 🛡️ Arquitetura, Persistência e Recursos do Sistema
+
+### 📦 Auto-Instalador Nativo
+- **Instalação Automática:** O comando `npm run tauri build` gera automaticamente instaladores executáveis para Windows (`.exe` com NSIS ou `.msi`), macOS (`.dmg` / `.app`) e Linux (`.AppImage` / `.deb`).
+
+### 💾 Persistência de Dados e Atualizações
+- **Isolamento de Dados:** O banco de dados SQLite (`study_os.db`) é mantido no diretório local de dados do usuário:
+  - **Windows:** `%LOCALAPPDATA%\study-os\study_os.db`
+- **Zero Perda de Dados em Updates:** Quando você distribui uma versão atualizada do app, o instalador substitui apenas o binário da aplicação. O arquivo de banco de dados em `AppData` **permaneceu intocado**.
+- **Migrações Automáticas:** O backend Rust possui migrações automáticas (`CREATE TABLE IF NOT EXISTS`), garantindo compatibilidade contínua ao atualizar o app.
+
+### 🔐 Permissões e Recursos do Sistema Operacional
+- **Acesso Nativo ao SO:** Por rodar nativamente via Rust/Tauri, o aplicativo possui integração com:
+  - 📁 **Sistema de Arquivos:** Leitura e escrita direta de dados locais.
+  - 📋 **Área de Transferência:** Cópia rápida com feedback em tempo real.
+  - 🔔 **Notificações Nativas:** Alertas integrados à central de notificações do sistema operacional.
+  - 🪟 **Gerenciamento de Janelas & Tray:** Atalhos e controle da aplicação na bandeja do sistema.
+
+---
+
 ## 📜 Scripts Disponíveis
 
 No arquivo `package.json`, estão disponíveis os seguintes comandos:
