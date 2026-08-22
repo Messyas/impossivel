@@ -116,7 +116,7 @@ export function StudyWorkspace() {
           className="flex items-center gap-2.5 rounded-full px-2.5 py-1 text-left transition-colors hover:bg-accent/60 outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
         >
           <span className="text-sm font-medium text-foreground max-w-36 truncate">{preferences.name}</span>
-          <Avatar size="sm">
+          <Avatar className="size-[36px]">
             <AvatarImage src={preferences.avatar || undefined} alt={`Foto de ${preferences.name}`} />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
