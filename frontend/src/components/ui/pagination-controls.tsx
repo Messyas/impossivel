@@ -7,7 +7,6 @@ import { useTranslation } from '@/lib/i18n'
 export interface PaginationControlsProps {
   page: number
   totalPages: number
-  totalCount: number
   perPage: number
   hasMore: boolean
   onPageChange: (newPage: number) => void
@@ -17,15 +16,12 @@ export interface PaginationControlsProps {
 export function PaginationControls({
   page,
   totalPages,
-  totalCount,
   perPage,
   hasMore,
   onPageChange,
   onPerPageChange,
 }: PaginationControlsProps) {
   const { t } = useTranslation()
-  const startItem = totalCount > 0 ? (page - 1) * perPage + 1 : 0
-  const endItem = Math.min(page * perPage, totalCount)
 
   // Generate visible page numbers
   const pages: (number | string)[] = []
@@ -43,13 +39,10 @@ export function PaginationControls({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-4 text-sm">
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span>
-          {t('pagination.showing')} <strong className="font-mono text-foreground">{startItem}</strong>–<strong className="font-mono text-foreground">{endItem}</strong> {t('pagination.of')} <strong className="font-mono text-foreground">{totalCount}</strong> {t('pagination.records')}
-        </span>
+    <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center text-xs text-muted-foreground">
         {onPerPageChange && (
-          <div className="flex items-center gap-1.5 ml-2">
+          <div className="flex items-center gap-2">
             <span>{t('pagination.perPage')}</span>
             <Select value={String(perPage)} onValueChange={v => onPerPageChange(Number(v))}>
               <SelectTrigger className="h-8 w-16 text-xs">
@@ -65,7 +58,7 @@ export function PaginationControls({
         )}
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1 sm:justify-end">
         <Button
           variant="outline"
           size="sm"

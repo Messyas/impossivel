@@ -20,6 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { RoadmapCreateDialog, StepCreateDialog, TaskCreateDialog } from '@/components/creation-dialogs'
 import { InfiniteScrollSentinel } from '@/components/ui/infinite-scroll-sentinel'
+import { DestructiveConfirmDialog } from '@/components/ui/destructive-confirm-dialog'
+import { AnimatedIcon } from '@/components/ui/animated-icon'
 
 function formatFocusTime(total:number) { const minutes=Math.floor(total/60); const seconds=total%60; return `${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}` }
 
@@ -71,15 +73,22 @@ export function TodoView({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearAllTasks}
-              className="text-muted-foreground hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
-            >
-              <Trash2 data-icon="inline-start" className="size-4" />
-              Limpar todas
-            </Button>
+            <DestructiveConfirmDialog
+              title="Apagar todas as tarefas?"
+              description="Esta ação apagará permanentemente todas as tarefas e não poderá ser desfeita."
+              confirmLabel="Apagar tarefas"
+              onConfirm={clearAllTasks}
+              trigger={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-muted-foreground hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                >
+                  <Trash2 data-icon="inline-start" className="size-4" />
+                  Limpar todas
+                </Button>
+              }
+            />
             <TaskCreateDialog onCreate={t => addTask({ title: t.title, group: t.group, subject: t.subject, duration: t.duration, priority: t.priority, due: t.due })} />
           </div>
         </div>
@@ -115,20 +124,22 @@ function TaskRow({
   onStartFocus: () => void
 }) {
   const showFocusEffect = isFocused && !task.done
+  const showFocusAnimation = showFocusEffect && Boolean(activeFocus?.running)
 
-  return <Card className={`relative overflow-hidden transition-all py-0 ${showFocusEffect ? 'border-primary/60 bg-accent/40 shadow-xs' : ''} ${task.done ? 'opacity-65' : ''}`}>
-    {showFocusEffect && (
-      <svg className="pointer-events-none absolute inset-0 size-full rounded-xl" style={{ padding: 1 }}>
+  return <Card className={`relative overflow-hidden py-0 transition-[box-shadow,opacity] ${showFocusAnimation ? 'ring-primary/30' : 'hover:ring-2 hover:ring-foreground/30'} ${task.done ? 'opacity-65' : ''}`}>
+    {showFocusAnimation && (
+      <svg className="pointer-events-none absolute inset-0 size-full text-primary" aria-hidden="true">
         <rect
-          width="100%"
-          height="100%"
+          x="1"
+          y="1"
+          width="calc(100% - 2px)"
+          height="calc(100% - 2px)"
           rx="11"
           fill="none"
-          stroke="var(--primary)"
+          stroke="currentColor"
           strokeWidth="2"
           strokeDasharray="8 6"
           className="animate-slow-dash"
-          style={{ animationPlayState: activeFocus?.running ? 'running' : 'paused' }}
         />
       </svg>
     )}
@@ -161,14 +172,17 @@ function TaskRow({
           <Button
             size="icon"
             variant="ghost"
+            className="nav-button"
             onClick={activeFocus.toggleRunning}
             aria-label={activeFocus.running ? "Pausar timer" : "Iniciar timer"}
           >
-            {activeFocus.running ? <Pause className="size-4" /> : <Play className="size-4" />}
+            <AnimatedIcon>
+              {activeFocus.running ? <Pause /> : <Play />}
+            </AnimatedIcon>
           </Button>
         ) : (
-          <Button size="icon" variant="ghost" onClick={onStartFocus} aria-label={`Focar em ${task.title}`}>
-            <Play className="size-4" />
+          <Button size="icon" variant="ghost" className="nav-button" onClick={onStartFocus} aria-label={`Focar em ${task.title}`}>
+            <AnimatedIcon><Play /></AnimatedIcon>
           </Button>
         )}
       </div>
@@ -193,7 +207,34 @@ function TaskRow({
 export function RoadmapsView({ onFocus }: { onFocus: (title:string,minutes?:number)=>void }) {
   const { roadmaps: items, createRoadmap, addStep, deleteRoadmap, clearAllRoadmaps, loadingMore, hasMore, fetchNextPage } = useRoadmaps()
   const { t } = useTranslation()
-  return <><SectionTitle eyebrow={t('roadmaps.eyebrow')} title={t('roadmaps.title')} detail={t('roadmaps.detail')} action={<div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={clearAllRoadmaps} className="text-muted-foreground hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 data-icon="inline-start" className="size-4" />Limpar todos</Button><RoadmapCreateDialog onCreate={roadmap => createRoadmap({ name: roadmap.name, code: roadmap.code, steps: roadmap.steps })} /></div>} /><div className="flex flex-col gap-5">{items.map(r => <RoadmapCard key={r.name} roadmap={r} onFocus={onFocus} onDelete={() => deleteRoadmap(r)} onAddStep={(step,after)=> { const dbId = (r as unknown as { _dbId?: string })._dbId; if (dbId) addStep(dbId, step.title) }} />)}</div><InfiniteScrollSentinel hasMore={hasMore} loading={loadingMore} onLoadMore={fetchNextPage} labelEnd="Todos os roadmaps foram carregados" /></>
+  return <>
+    <SectionTitle
+      eyebrow={t('roadmaps.eyebrow')}
+      title={t('roadmaps.title')}
+      detail={t('roadmaps.detail')}
+      action={
+        <div className="flex items-center gap-2">
+          <DestructiveConfirmDialog
+            title="Apagar todos os roadmaps?"
+            description="Esta ação apagará permanentemente todos os roadmaps e suas etapas. Não será possível desfazer."
+            confirmLabel="Apagar roadmaps"
+            onConfirm={clearAllRoadmaps}
+            trigger={
+              <Button variant="outline" size="sm" className="text-muted-foreground hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive transition-colors">
+                <Trash2 data-icon="inline-start" className="size-4" />
+                Limpar todos
+              </Button>
+            }
+          />
+          <RoadmapCreateDialog onCreate={roadmap => createRoadmap({ name: roadmap.name, code: roadmap.code, steps: roadmap.steps })} />
+        </div>
+      }
+    />
+    <div className="flex flex-col gap-5">
+      {items.map(r => <RoadmapCard key={r.name} roadmap={r} onFocus={onFocus} onDelete={() => deleteRoadmap(r)} onAddStep={(step,after)=> { const dbId = (r as unknown as { _dbId?: string })._dbId; if (dbId) addStep(dbId, step.title) }} />)}
+    </div>
+    <InfiniteScrollSentinel hasMore={hasMore} loading={loadingMore} onLoadMore={fetchNextPage} labelEnd="Todos os roadmaps foram carregados" />
+  </>
 }
 
 function RoadmapCard({ roadmap: r, onFocus, onDelete, onAddStep }: { roadmap: Roadmap; onFocus:(t:string,m?:number)=>void; onDelete: () => void; onAddStep:(step:Roadmap['steps'][number],after:string)=>void }) {

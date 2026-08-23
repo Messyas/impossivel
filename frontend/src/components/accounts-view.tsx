@@ -18,6 +18,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useAccounts, FrontendAccount } from '@/hooks/use-tauri-data'
 import { useTranslation } from '@/lib/i18n'
 import { PaginationControls } from '@/components/ui/pagination-controls'
+import { DestructiveConfirmDialog } from '@/components/ui/destructive-confirm-dialog'
 
 export type Credential = { id: string; label: string; type: string; value: string; active: boolean }
 export type Account = FrontendAccount
@@ -138,7 +139,81 @@ export function CredentialCreateDialog({
   )
 }
 
-function AccountForm({ draft, setDraft }: { draft: Account; setDraft: (a: Account) => void }) {
+function AccountForm({
+  draft,
+  setDraft,
+  password,
+  setPassword,
+}: {
+  draft: Account
+  setDraft: (a: Account) => void
+  password: string
+  setPassword: (password: string) => void
+}) {
+  const patch = (p: Partial<Account>) => setDraft({ ...draft, ...p })
+  const [showPassword, setShowPassword] = useState(false)
+
+  return (
+    <FieldGroup className="pt-2">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SelectField label="Serviço" value={draft.service} onChange={(service) => patch({ service })} options={services} />
+        <Field>
+          <FieldLabel>Nome da conta</FieldLabel>
+          <Input autoFocus placeholder="Ex.: Conta principal" value={draft.label} onChange={(e) => patch({ label: e.target.value })} />
+        </Field>
+        <Field>
+          <FieldLabel>E-mail</FieldLabel>
+          <Input type="email" placeholder="nome@exemplo.com" value={draft.email} onChange={(e) => patch({ email: e.target.value })} />
+        </Field>
+        <Field>
+          <FieldLabel>
+            Senha {draft.id && <span className="font-normal text-muted-foreground">(deixe vazia para manter)</span>}
+          </FieldLabel>
+          <div className="relative">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              placeholder={draft.id ? 'Digite apenas para alterar' : 'Digite a senha'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="pr-10"
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground"
+              onClick={() => setShowPassword((visible) => !visible)}
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+            >
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </Button>
+          </div>
+        </Field>
+        <Field>
+          <FieldLabel>Usuário <span className="font-normal text-muted-foreground">(opcional)</span></FieldLabel>
+          <Input value={draft.username || ''} onChange={(e) => patch({ username: e.target.value })} />
+        </Field>
+        <SelectField label="Finalidade" value={draft.purpose} onChange={(purpose) => patch({ purpose })} options={purposes} />
+        <SelectField label="Status" value={draft.status} onChange={(status) => patch({ status })} options={statuses} />
+        <SelectField label="Plano" value={draft.plan} onChange={(plan) => patch({ plan })} options={['Free', 'Trial', 'Paid', 'Student', 'Custom', 'Hobby']} />
+      </div>
+      <Field>
+        <FieldLabel>Notas <span className="font-normal text-muted-foreground">(opcional)</span></FieldLabel>
+        <Textarea className="min-h-24" placeholder="Informações úteis sobre esta conta" value={draft.notes || ''} onChange={(e) => patch({ notes: e.target.value })} />
+      </Field>
+      <label className="flex items-center gap-3 text-sm">
+        <Checkbox checked={draft.inUse} onCheckedChange={(v) => patch({ inUse: Boolean(v) })} />
+        Esta conta está em uso
+      </label>
+      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+        <KeyRound className="size-3.5" />
+        A senha é armazenada com criptografia AES-256-GCM.
+      </p>
+    </FieldGroup>
+  )
+}
+
+function LegacyAccountForm({ draft, setDraft }: { draft: Account; setDraft: (a: Account) => void }) {
   const patch = (p: Partial<Account>) => setDraft({ ...draft, ...p })
 
   return (
@@ -300,16 +375,18 @@ function AccountDialog({
   const open = isControlled ? controlledOpen : internalOpen
   const setOpen = isControlled ? (setControlledOpen ?? (() => {})) : setInternalOpen
   const [draft, setDraft] = useState<Account>(account ?? blankAccount())
+  const [password, setPassword] = useState('')
 
   useEffect(() => {
     if (open) {
       setDraft(account ?? blankAccount())
+      setPassword('')
     }
   }, [open, account])
 
   const save = () => {
-    if (!draft.label.trim() || !draft.email.trim()) return
-    onSave(draft)
+    if (!draft.label.trim() || !draft.email.trim() || (!account && !password)) return
+    onSave({ ...draft, credentials: password ? [{ id: '', label: 'Senha', type: 'Password', value: password, active: true }] : draft.credentials })
     setOpen(false)
     if (!account) setDraft(blankAccount())
   }
@@ -317,20 +394,20 @@ function AccountDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger && <DialogTrigger render={trigger} />}
-      <DialogContent className="flex max-h-[88vh] flex-col sm:max-w-3xl">
+      <DialogContent className="flex max-h-[88vh] flex-col sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{account ? `${account.service} · ${account.label}` : 'New Account'}</DialogTitle>
+          <DialogTitle>{account ? `Editar ${account.label}` : 'Nova conta'}</DialogTitle>
           <DialogDescription>
-            {account ? 'Edit account configuration, credentials, and usage notes.' : 'Register a new developer account, API service, or platform.'}
+            {account ? 'Atualize os dados da conta. Preencha a senha somente se quiser alterá-la.' : 'Preencha os dados principais para cadastrar uma conta.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto pr-1">
-          <AccountForm draft={draft} setDraft={setDraft} />
+          <AccountForm draft={draft} setDraft={setDraft} password={password} setPassword={setPassword} />
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-          <Button disabled={!draft.label.trim() || !draft.email.trim()} onClick={save}>
-            {account ? 'Save changes' : 'Create Account'}
+          <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
+          <Button disabled={!draft.label.trim() || !draft.email.trim() || (!account && !password)} onClick={save}>
+            {account ? 'Salvar alterações' : 'Criar conta'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -380,6 +457,7 @@ function CredentialCard({ credential, onReveal }: { credential: Credential; onRe
 
 function AccountRow({
   account,
+  onRevealCredential,
   onToggle,
   onSave,
   onArchive,
@@ -387,6 +465,7 @@ function AccountRow({
   onDuplicate,
 }: {
   account: Account
+  onRevealCredential: (id: string) => Promise<string>
   onToggle: () => void
   onSave: (a: Account) => void
   onArchive: () => void
@@ -395,6 +474,36 @@ function AccountRow({
 }) {
   const { t } = useTranslation()
   const [editOpen, setEditOpen] = useState(false)
+  const [passwordVisible, setPasswordVisible] = useState(false)
+  const [revealedPassword, setRevealedPassword] = useState('')
+  const passwordCredential = account.credentials.find((credential) => credential.type.toLowerCase() === 'password')
+
+  useEffect(() => {
+    setPasswordVisible(false)
+    setRevealedPassword('')
+  }, [passwordCredential?.id])
+
+  const copy = (value: string) => {
+    void navigator.clipboard.writeText(value)
+  }
+
+  const revealPassword = async () => {
+    if (!passwordCredential) return ''
+    if (revealedPassword) return revealedPassword
+    const plaintext = await onRevealCredential(passwordCredential.id)
+    setRevealedPassword(plaintext)
+    return plaintext
+  }
+
+  const togglePassword = async () => {
+    if (!passwordVisible) await revealPassword()
+    setPasswordVisible((visible) => !visible)
+  }
+
+  const copyPassword = async () => {
+    const plaintext = await revealPassword()
+    if (plaintext) copy(plaintext)
+  }
 
   return (
     <TableRow className="group">
@@ -411,7 +520,31 @@ function AccountRow({
           {account.label}
         </button>
       </TableCell>
-      <TableCell className="font-mono text-xs text-muted-foreground">{account.email}</TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1">
+          <span className="font-mono text-xs text-muted-foreground">{account.email}</span>
+          <Button type="button" size="icon" variant="ghost" className="size-7" onClick={() => copy(account.email)} aria-label={`Copiar e-mail ${account.email}`} title="Copiar e-mail">
+            <Copy className="size-3.5" />
+          </Button>
+        </div>
+      </TableCell>
+      <TableCell>
+        {passwordCredential ? (
+          <div className="flex items-center gap-1">
+            <span className="min-w-20 font-mono text-xs text-muted-foreground">
+              {passwordVisible ? revealedPassword : '••••••••'}
+            </span>
+            <Button type="button" size="icon" variant="ghost" className="size-7" onClick={togglePassword} aria-label={passwordVisible ? 'Ocultar senha' : 'Mostrar senha'} title={passwordVisible ? 'Ocultar senha' : 'Mostrar senha'}>
+              {passwordVisible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+            </Button>
+            <Button type="button" size="icon" variant="ghost" className="size-7" onClick={copyPassword} aria-label="Copiar senha" title="Copiar senha">
+              <Copy className="size-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </TableCell>
       <TableCell>
         <StatusBadge>{account.purpose}</StatusBadge>
       </TableCell>
@@ -430,7 +563,7 @@ function AccountRow({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
-                <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                <DropdownMenuItem onClick={() => setEditOpen(true)}>
                   {t('common.edit')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={onDuplicate}>{t('accounts.duplicate')}</DropdownMenuItem>
@@ -455,7 +588,7 @@ function AccountRow({
 }
 
 export function AccountsView() {
-  const { accounts, createAccount, archiveAccount, deleteAccount, clearAllAccounts, toggleAccountUse, revealCredential, addCredential, page, setPage, perPage, setPerPage, cursor, setCursor, nextCursor, totalCount, totalPages, hasMore } = useAccounts()
+  const { accounts, createAccount, archiveAccount, deleteAccount, clearAllAccounts, toggleAccountUse, revealCredential, page, setPage, perPage, setPerPage, cursor, setCursor, nextCursor, totalCount, totalPages, hasMore } = useAccounts()
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [service, setService] = useState('All')
@@ -468,6 +601,7 @@ export function AccountsView() {
 
   const save = async (a: Account) => {
     await createAccount({
+      id: a.id || undefined,
       service: a.service,
       label: a.label,
       email: a.email,
@@ -480,6 +614,7 @@ export function AccountsView() {
       notes: a.notes,
       tags: a.tags,
       credits: a.credits,
+      password: a.credentials.find((credential) => !credential.id && credential.type === 'Password')?.value,
     })
   }
 
@@ -528,17 +663,30 @@ export function AccountsView() {
           <span className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">{t('accounts.eyebrow')}</span>
           <h1 className="text-3xl font-semibold tracking-tight">{t('accounts.title')}</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearAllAccounts}
-            className="text-muted-foreground hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
-          >
-            <Trash2 data-icon="inline-start" className="size-4" />
-            Limpar todas
-          </Button>
-          <AccountDialog onSave={save} trigger={<Button><Plus data-icon="inline-start" />{t('accounts.addAccount')}</Button>} />
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <strong className="font-mono text-sm font-semibold text-foreground">{totalCount}</strong>
+            <span>{t('accounts.accountsCount')}</span>
+          </span>
+          <div className="flex items-center gap-2">
+            <DestructiveConfirmDialog
+              title="Apagar todas as contas?"
+              description="Esta ação apagará permanentemente todas as contas e suas credenciais salvas. Não será possível desfazer."
+              confirmLabel="Apagar contas"
+              onConfirm={clearAllAccounts}
+              trigger={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-muted-foreground hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                >
+                  <Trash2 data-icon="inline-start" className="size-4" />
+                  Limpar todas
+                </Button>
+              }
+            />
+            <AccountDialog onSave={save} trigger={<Button><Plus data-icon="inline-start" />{t('accounts.addAccount')}</Button>} />
+          </div>
         </div>
       </div>
       <div className="mb-4 flex items-center gap-3">
@@ -606,6 +754,7 @@ export function AccountsView() {
                   <TableHead>{t('accounts.service')}</TableHead>
                   <TableHead>{t('accounts.accountLabel')}</TableHead>
                   <TableHead>{t('accounts.email')}</TableHead>
+                  <TableHead>Senha</TableHead>
                   <TableHead>{t('accounts.purpose')}</TableHead>
                   <TableHead>{t('accounts.status')}</TableHead>
                   <TableHead>{t('accounts.freeTier')}</TableHead>
@@ -618,6 +767,7 @@ export function AccountsView() {
                   <AccountRow
                     key={a.id}
                     account={a}
+                    onRevealCredential={revealCredential}
                     onToggle={() => toggle(a)}
                     onSave={save}
                     onArchive={() => archiveAccount(a.id)}
@@ -632,7 +782,6 @@ export function AccountsView() {
         <PaginationControls
           page={page}
           totalPages={totalPages}
-          totalCount={totalCount}
           perPage={perPage}
           hasMore={hasMore}
           onPageChange={(p) => {

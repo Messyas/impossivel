@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, BookOpen, CalendarDays, CheckSquare2, KeyRound, Pause, Play, RotateCcw, Settings, StickyNote } from 'lucide-react'
+import { BarChart3, BookOpen, CalendarDays, CheckSquare2, KeyRound, Pause, Play, RotateCcw, StickyNote } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -9,18 +9,19 @@ import { SettingsView } from '@/components/settings-view'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useUserPreferences } from '@/hooks/use-user-preferences'
 import { useTranslation, type TranslationKey } from '@/lib/i18n'
+import { AnimatedIcon } from '@/components/ui/animated-icon'
+import { WindowControls } from '@/components/ui/window-controls'
 
-const nav: { id: 'todo' | 'roadmaps' | 'calendar' | 'notes' | 'accounts' | 'dashboard' | 'settings'; labelKey: TranslationKey; icon: typeof CheckSquare2 }[] = [
+const nav: { id: 'todo' | 'roadmaps' | 'calendar' | 'notes' | 'accounts' | 'dashboard'; labelKey: TranslationKey; icon: typeof CheckSquare2 }[] = [
   { id: 'todo', labelKey: 'nav.todo', icon: CheckSquare2 },
   { id: 'roadmaps', labelKey: 'nav.roadmaps', icon: BookOpen },
   { id: 'calendar', labelKey: 'nav.calendar', icon: CalendarDays },
   { id: 'notes', labelKey: 'nav.notes', icon: StickyNote },
   { id: 'accounts', labelKey: 'nav.accounts', icon: KeyRound },
   { id: 'dashboard', labelKey: 'nav.dashboard', icon: BarChart3 },
-  { id: 'settings', labelKey: 'nav.settings', icon: Settings },
 ]
 
-export type ViewId = (typeof nav)[number]['id']
+export type ViewId = (typeof nav)[number]['id'] | 'settings'
 
 function formatTime(total: number) { const m = Math.floor(total / 60); const s = total % 60; return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` }
 
@@ -48,8 +49,12 @@ export function StudyWorkspace() {
 
   return <main className="min-h-screen bg-background text-foreground">
     <header data-tauri-drag-region className="sticky top-0 z-40 border-b bg-background select-none">
-      <div className="flex h-16 w-full items-center gap-6 px-6 lg:px-8">
-        <nav aria-label="Navegação principal" className="flex h-full flex-1 items-center gap-1">
+      <div data-tauri-drag-region className="flex h-16 w-full items-center gap-6 pl-6 lg:pl-8">
+        <div data-tauri-drag-region className="flex h-full shrink-0 items-center" aria-label="Study OS">
+          <img src={`${import.meta.env.BASE_URL}logo-light-mode.svg`} alt="Study OS" className="size-[3.85rem] scale-[1.15] object-contain dark:hidden" />
+          <img src={`${import.meta.env.BASE_URL}logo-dark-mode.svg`} alt="" className="hidden size-[3.85rem] scale-[1.15] object-contain dark:block" />
+        </div>
+        <nav data-tauri-drag-region aria-label="Navegação principal" className="flex h-full flex-1 items-center gap-1">
           {nav.map(item => (
             <button
               key={item.id}
@@ -57,11 +62,11 @@ export function StudyWorkspace() {
               type="button"
               aria-current={view === item.id ? 'page' : undefined}
               onClick={() => setView(item.id)}
-              className={`flex h-full items-center gap-2 border-b-2 px-3 text-sm transition-colors ${
+              className={`nav-button flex h-full items-center gap-2 border-b-2 px-3 text-sm transition-colors ${
                 view === item.id ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              <item.icon className="size-4" />
+              <AnimatedIcon><item.icon /></AnimatedIcon>
               {t(item.labelKey)}
             </button>
           ))}
@@ -121,6 +126,7 @@ export function StudyWorkspace() {
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
         </button>
+        <WindowControls />
       </div>
     </header>
     <div className="w-full px-6 lg:px-8 py-6">

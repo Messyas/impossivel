@@ -146,6 +146,7 @@ const ptBR = {
   'accounts.title': 'Contas de Estudo',
   'accounts.detail': 'Suas credenciais protegidas nativamente por criptografia AES-256-GCM.',
   'accounts.addAccount': 'Nova conta',
+  'accounts.accountsCount': 'contas',
   'accounts.inUse': 'Em uso',
   'accounts.service': 'Serviço',
   'accounts.accountLabel': 'Rótulo',
@@ -320,6 +321,7 @@ const enUS: typeof ptBR = {
   'accounts.title': 'Study Accounts',
   'accounts.detail': 'Your credentials securely protected by native AES-256-GCM encryption.',
   'accounts.addAccount': 'New account',
+  'accounts.accountsCount': 'accounts',
   'accounts.inUse': 'In use',
   'accounts.service': 'Service',
   'accounts.accountLabel': 'Label',
@@ -468,6 +470,7 @@ const es: Partial<Record<TranslationKey, string>> = {
   'accounts.title': 'Cuentas de Estudio',
   'accounts.detail': 'Tus credenciales protegidas con cifrado AES-256-GCM nativo.',
   'accounts.addAccount': 'Nueva cuenta',
+  'accounts.accountsCount': 'cuentas',
 
   // Dashboard View
   'dashboard.eyebrow': 'Últimos 7 días',
@@ -599,6 +602,7 @@ const fr: Partial<Record<TranslationKey, string>> = {
   'accounts.title': 'Comptes d\'Étude',
   'accounts.detail': 'Vos identifiants protégés par chiffrement AES-256-GCM.',
   'accounts.addAccount': 'Nouveau compte',
+  'accounts.accountsCount': 'comptes',
 
   // Dashboard View
   'dashboard.eyebrow': '7 derniers jours',

@@ -105,6 +105,8 @@ export type FrontendAccount = {
   credentials: { id: string; label: string; type: string; value: string; active: boolean }[]
 }
 
+const browserCredentialSecrets = new Map<string, string>()
+
 export interface BackendPaginatedResponse<T> {
   items: T[]
   next_cursor: string | null
@@ -522,6 +524,7 @@ export function useAccounts() {
     notes?: string
     tags?: string[]
     credits?: string
+    password?: string
   }) => {
     if (payload.id) {
       setAccounts(prev => prev.map(a => a.id === payload.id ? {
@@ -537,10 +540,17 @@ export function useAccounts() {
         inUse: payload.inUse !== undefined ? payload.inUse : a.inUse,
         notes: payload.notes !== undefined ? payload.notes : a.notes,
         credits: payload.credits !== undefined ? payload.credits : a.credits,
+        credentials: payload.password ? (() => {
+          const currentPassword = a.credentials.find(credential => credential.type.toLowerCase() === 'password')
+          const credentialId = currentPassword?.id || `cred-${Date.now()}`
+          browserCredentialSecrets.set(credentialId, payload.password)
+          const nextPassword = { id: credentialId, label: 'Senha', type: 'Password', value: '••••••••', active: true }
+          return [...a.credentials.filter(credential => credential.type.toLowerCase() !== 'password'), nextPassword]
+        })() : a.credentials,
       } : a))
     }
     if (isTauri()) {
-      await safeInvoke('create_account', {
+      const saved = await safeInvoke<BackendAccount | null>('create_account', {
         payload: {
           id: payload.id,
           service: payload.service,
@@ -556,9 +566,31 @@ export function useAccounts() {
           tags: payload.tags,
           credits: payload.credits,
         },
-      }).catch(console.error)
+      }, null).catch(error => {
+        console.error(error)
+        return null
+      })
+      const accountId = saved?.id || payload.id
+      if (payload.password && accountId) {
+        await safeInvoke('add_credential', {
+          payload: {
+            account_id: accountId,
+            label: 'Senha',
+            cred_type: 'Password',
+            secret: payload.password,
+          },
+        }).catch(console.error)
+        const previousPassword = accounts
+          .find(account => account.id === payload.id)
+          ?.credentials.find(credential => credential.type.toLowerCase() === 'password')
+        if (previousPassword) {
+          await safeInvoke('remove_credential', { id: previousPassword.id }).catch(console.error)
+        }
+      }
       await reloadAccounts()
     } else if (!payload.id) {
+      const passwordCredentialId = `cred-${Date.now()}`
+      if (payload.password) browserCredentialSecrets.set(passwordCredentialId, payload.password)
       const newAcc: FrontendAccount = {
         id: `acc-${Date.now()}`,
         service: payload.service,
@@ -574,7 +606,9 @@ export function useAccounts() {
         notes: payload.notes || '',
         tags: payload.tags || [],
         credits: payload.credits || '',
-        credentials: [],
+        credentials: payload.password
+          ? [{ id: passwordCredentialId, label: 'Senha', type: 'Password', value: '••••••••', active: true }]
+          : [],
       }
       setAccounts(prev => [newAcc, ...prev])
     }
@@ -612,7 +646,7 @@ export function useAccounts() {
     if (isTauri()) {
       return await safeInvoke<string>('reveal_credential', { id: credentialId }, '••••••••')
     }
-    return '••••••••'
+    return browserCredentialSecrets.get(credentialId) || '••••••••'
   }
 
   const deleteAccount = async (id: string) => {
@@ -728,4 +762,3 @@ export function useDashboardAnalytics() {
 
   return { analytics, loading, reloadAnalytics }
 }
-

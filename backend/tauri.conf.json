@@ -15,7 +15,9 @@
         "title": "Study/OS — Learning Workspace",
         "width": 1280,
         "height": 860,
+        "maximized": true,
         "resizable": true,
+        "decorations": false,
         "center": true
       }
     ],
