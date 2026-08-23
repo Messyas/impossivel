@@ -74,8 +74,6 @@ interface BackendReviewOccurrence {
 interface BackendNote {
   id: string
   title: string
-  category: string
-  link: string
   content: string
   created_at: string
   updated_at: string
@@ -484,80 +482,153 @@ export function useReviews() {
 
 // ── Notes Hook ─────────────────────────────────────────────────────────────
 
-export function useNotes() {
-  const [notes, setNotes] = useState<Note[]>(initialNotes)
-  const [loading, setLoading] = useState(true)
+function mapBackendNote(note: BackendNote): Note {
+  const rawDate = note.updated_at.includes('T') ? note.updated_at : `${note.updated_at.replace(' ', 'T')}Z`
+  const parsedDate = new Date(rawDate)
+  return {
+    id: note.id,
+    _dbId: note.id,
+    title: note.title,
+    updated: Number.isNaN(parsedDate.getTime()) ? 'recentemente' : parsedDate.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }),
+    content: note.content,
+  }
+}
+
+export function useNotes(search = '') {
+  const [browserNotes, setBrowserNotes] = useState<Note[]>(initialNotes)
+  const [notes, setNotes] = useState<Note[]>(() => isTauri() ? [] : initialNotes)
+  const [loading, setLoading] = useState(() => isTauri())
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(initialNotes.length)
+  const [hasMore, setHasMore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const perPage = 30
 
   const reloadNotes = useCallback(async () => {
-    if (!isTauri()) return
+    setError(null)
+    if (!isTauri()) {
+      const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR')
+      const filtered = normalizedSearch
+        ? browserNotes.filter(note => `${note.title}\n${note.content}`.toLocaleLowerCase('pt-BR').includes(normalizedSearch))
+        : browserNotes
+      setNotes(filtered)
+      setTotalCount(filtered.length)
+      setHasMore(false)
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
     try {
-      const res = await safeInvoke<BackendNote[]>('get_notes', undefined, [])
-      if (res.length > 0) {
-        const mapped: Note[] = res.map((n, idx) => ({
-          id: (idx + 1),
-          _dbId: n.id,
-          title: n.title,
-          category: n.category,
-          link: n.link,
-          updated: n.updated_at ? new Date(n.updated_at).toLocaleDateString() : 'hoje',
-          content: n.content,
-        } as Note & { _dbId: string }))
-        setNotes(mapped)
-      }
-    } catch (e) {
-      console.error('Error fetching notes from SQLite:', e)
+      const response = await safeInvoke<BackendPaginatedResponse<BackendNote>>(
+        'get_notes',
+        { query: { page: 1, per_page: perPage, search } },
+      )
+      setNotes(response.items.map(mapBackendNote))
+      setTotalCount(response.total_count)
+      setHasMore(response.has_more)
+      setPage(1)
+    } catch (cause) {
+      console.error('Error fetching notes from SQLite:', cause)
+      setError('Não foi possível carregar as notas.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [browserNotes, search])
 
   useEffect(() => {
-    reloadNotes()
+    void reloadNotes()
   }, [reloadNotes])
 
-  const createNote = async () => {
-    if (isTauri()) {
-      await safeInvoke('create_note').catch(console.error)
-      await reloadNotes()
-    } else {
-      const newNote: Note = {
-        id: Date.now(),
-        title: 'Nova nota',
-        category: 'Inbox',
-        link: 'Sem vínculo',
-        updated: 'agora',
-        content: '# Nova nota\n\nDigite seu conteúdo...',
-      }
-      setNotes(prev => [newNote, ...prev])
+  const fetchNextPage = useCallback(async () => {
+    if (!isTauri() || !hasMore || loadingMore) return
+    setLoadingMore(true)
+    const nextPage = page + 1
+    try {
+      const response = await safeInvoke<BackendPaginatedResponse<BackendNote>>(
+        'get_notes',
+        { query: { page: nextPage, per_page: perPage, search } },
+      )
+      setNotes(previous => {
+        const ids = new Set(previous.map(note => note._dbId ?? String(note.id)))
+        return [...previous, ...response.items.map(mapBackendNote).filter(note => !ids.has(note._dbId ?? String(note.id)))]
+      })
+      setPage(nextPage)
+      setHasMore(response.has_more)
+    } catch (cause) {
+      console.error('Error fetching more notes:', cause)
+      setError('Não foi possível carregar mais notas.')
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [hasMore, loadingMore, page, search])
+
+  const createNote = async (): Promise<Note | undefined> => {
+    setError(null)
+    try {
+      const note = isTauri()
+        ? mapBackendNote(await safeInvoke<BackendNote>('create_note'))
+        : { id: Date.now(), title: 'Nova nota', updated: 'agora', content: '' }
+      if (!isTauri()) setBrowserNotes(previous => [note, ...previous])
+      setNotes(previous => [note, ...previous])
+      setTotalCount(previous => previous + 1)
+      return note
+    } catch (cause) {
+      console.error('Error creating note:', cause)
+      setError('Não foi possível criar a nota.')
     }
   }
 
-  const updateNote = async (dbId: string, patch: { title?: string; category?: string; content?: string }) => {
-    if (isTauri()) {
-      await safeInvoke('update_note', { payload: { id: dbId, ...patch } }).catch(console.error)
+  const updateNote = async (dbId: string, patch: Pick<Partial<Note>, 'title' | 'content'>) => {
+    const localPatch = { ...patch, updated: 'agora' }
+    setNotes(previous => previous.map(note => (note._dbId ?? String(note.id)) === dbId ? { ...note, ...localPatch } : note))
+    if (!isTauri()) {
+      setBrowserNotes(previous => previous.map(note => (note._dbId ?? String(note.id)) === dbId ? { ...note, ...localPatch } : note))
+      return
+    }
+    try {
+      await safeInvoke('update_note', { payload: { id: dbId, ...patch } })
+      setError(null)
+    } catch (cause) {
+      console.error('Error updating note:', cause)
+      setError('A última alteração não pôde ser salva.')
       await reloadNotes()
-    } else {
-      setNotes(prev => prev.map(n => (n as unknown as { _dbId?: string })._dbId === dbId || String(n.id) === dbId ? { ...n, ...patch } : n))
+      throw cause
     }
   }
 
   const deleteNote = async (dbId: string) => {
-    if (isTauri()) {
-      await safeInvoke('delete_note', { id: dbId }).catch(console.error)
-      await reloadNotes()
-    } else {
-      setNotes(prev => prev.filter(n => (n as unknown as { _dbId?: string })._dbId !== dbId && String(n.id) !== dbId))
+    setError(null)
+    try {
+      if (isTauri()) await safeInvoke('delete_note', { id: dbId })
+      else setBrowserNotes(previous => previous.filter(note => (note._dbId ?? String(note.id)) !== dbId))
+      setNotes(previous => previous.filter(note => (note._dbId ?? String(note.id)) !== dbId))
+      setTotalCount(previous => Math.max(0, previous - 1))
+    } catch (cause) {
+      console.error('Error deleting note:', cause)
+      setError('Não foi possível excluir a nota.')
+      throw cause
     }
   }
 
   const clearAllNotes = async () => {
-    setNotes([])
-    if (isTauri()) {
-      await safeInvoke('clear_all_notes', {}).catch(console.error)
+    setError(null)
+    try {
+      if (isTauri()) await safeInvoke('clear_all_notes', {})
+      else setBrowserNotes([])
+      setNotes([])
+      setTotalCount(0)
+      setHasMore(false)
+      setPage(1)
+    } catch (cause) {
+      console.error('Error clearing notes:', cause)
+      setError('Não foi possível apagar as notas.')
+      throw cause
     }
   }
 
-  return { notes, setNotes, loading, createNote, updateNote, deleteNote, clearAllNotes, reloadNotes }
+  return { notes, loading, loadingMore, totalCount, hasMore, error, createNote, updateNote, deleteNote, clearAllNotes, fetchNextPage, reloadNotes }
 }
 
 // ── Accounts Hook ──────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ptBR } from 'date-fns/locale'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
-import { BookOpen, Check, Circle, Clock3, FilePlus2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, Target, TimerReset, Trash2, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
+import { BookOpen, Check, Circle, Clock3, FilePlus2, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, StickyNote, Target, TimerReset, Trash2, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { type Note, type Roadmap, type Task } from '@/lib/study-data'
 import { useTasks, useRoadmaps, useNotes, useDashboardAnalytics } from '@/hooks/use-tauri-data'
 import { useTranslation } from '@/lib/i18n'
@@ -329,26 +329,67 @@ export function CalendarView({ onFocus: _onFocus }: { onFocus:(t:string,m?:numbe
 
 function Session({title,time,onClick}:{title:string;time:string;onClick:()=>void}) { return <button onClick={onClick} className="flex flex-col gap-1 rounded-md border bg-card p-3 text-left hover:bg-accent"><span className="text-xs font-medium">{title}</span><span className="font-mono text-[11px] text-muted-foreground">{time}</span></button> }
 
+
 export function NotesView() {
-  const { notes, createNote, updateNote, deleteNote, clearAllNotes } = useNotes()
   const { t } = useTranslation()
-  const [selectedId, setSelectedId] = useState<number | string | null>(null)
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [draftTitle, setDraftTitle] = useState('')
+  const [draftContent, setDraftContent] = useState('')
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const { notes, loading, loadingMore, totalCount, hasMore, error, createNote, updateNote, deleteNote, clearAllNotes, fetchNextPage } = useNotes(debouncedQuery)
 
-  const active = notes.find(n => n.id === selectedId || (n as unknown as { _dbId?: string })._dbId === selectedId) ?? notes[0]
-  const filtered = notes.filter(n => n.title.toLowerCase().includes(query.toLowerCase()))
+  const noteId = (note: Note) => note._dbId ?? String(note.id)
+  const active = notes.find(note => noteId(note) === selectedId) ?? null
 
-  const handleUpdate = (patch: Partial<Note>) => {
-    if (!active) return
-    const dbId = (active as unknown as { _dbId?: string })._dbId || String(active.id)
-    updateNote(dbId, patch)
-  }
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 250)
+    return () => window.clearTimeout(timer)
+  }, [query])
+
+  useEffect(() => {
+    if (notes.length === 0) {
+      setSelectedId(null)
+      return
+    }
+    if (!selectedId || !notes.some(note => noteId(note) === selectedId)) {
+      setSelectedId(noteId(notes[0]))
+    }
+  }, [notes, selectedId])
+
+  useEffect(() => {
+    if (!active) {
+      setDraftTitle('')
+      setDraftContent('')
+      setSaveState('idle')
+      return
+    }
+    setDraftTitle(active.title)
+    setDraftContent(active.content)
+    setSaveState('idle')
+  }, [active?._dbId, active?.id])
+
+  useEffect(() => {
+    if (!active || (draftTitle === active.title && draftContent === active.content)) return
+    setSaveState('saving')
+    const timer = window.setTimeout(async () => {
+      try {
+        await updateNote(noteId(active), { title: draftTitle, content: draftContent })
+        setSaveState('saved')
+      } catch {
+        setSaveState('error')
+      }
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [active?._dbId, active?.id, draftTitle, draftContent])
 
   const handleCreate = async () => {
-    await createNote()
+    setQuery('')
+    setDebouncedQuery('')
+    const created = await createNote()
+    if (created) setSelectedId(noteId(created))
   }
-
-  if (!active) return null
 
   return (
     <>
@@ -358,15 +399,20 @@ export function NotesView() {
         detail={t('notes.detail')}
         action={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearAllNotes}
-              className="text-muted-foreground hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
-            >
-              <Trash2 data-icon="inline-start" className="size-4" />
-              Limpar todas
-            </Button>
+            {notes.length > 0 && !query && (
+              <DestructiveConfirmDialog
+                title="Apagar todas as notas?"
+                description="Todas as notas serão apagadas permanentemente. Esta ação não pode ser desfeita."
+                confirmLabel="Apagar notas"
+                onConfirm={clearAllNotes}
+                trigger={
+                  <Button variant="outline" size="sm" className="text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive">
+                    <Trash2 data-icon="inline-start" className="size-4" />
+                    Limpar todas
+                  </Button>
+                }
+              />
+            )}
             <Button onClick={handleCreate}>
               <FilePlus2 data-icon="inline-start" className="size-4" />
               {t('notes.newNote')}
@@ -374,82 +420,123 @@ export function NotesView() {
           </div>
         }
       />
-      <div className="grid min-h-[680px] overflow-hidden rounded-xl border lg:grid-cols-[340px_1fr] xl:grid-cols-[360px_1fr]">
-        <aside className="border-r bg-card/40 flex flex-col">
-          <div className="border-b p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder={t('notes.searchPlaceholder')}
-                className="pl-9"
-              />
-            </div>
+
+      {error && (
+        <div role="alert" className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {loading && notes.length === 0 ? (
+        <div className="flex min-h-[520px] items-center justify-center rounded-xl border bg-card/30 text-sm text-muted-foreground">
+          <Loader2 className="mr-2 size-4 animate-spin" /> Carregando notas...
+        </div>
+      ) : notes.length === 0 && !query ? (
+        <div className="flex min-h-[520px] flex-col items-center justify-center rounded-xl border border-dashed bg-card/20 px-6 text-center">
+          <div className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <StickyNote className="size-7" />
           </div>
-          <ScrollArea className="flex-1 h-[600px]">
-            <div className="flex flex-col gap-2 p-3">
-              {filtered.map(n => {
-                const isActive = n.id === active.id || (n as unknown as { _dbId?: string })._dbId === (active as unknown as { _dbId?: string })._dbId
-                return (
-                  <div
-                    key={n.id}
-                    onClick={() => setSelectedId(n.id)}
-                    className={`group relative flex items-start justify-between gap-3 rounded-xl border p-4 text-left transition-all cursor-pointer ${
-                      isActive
-                        ? 'border-primary/50 bg-accent/80 shadow-xs'
-                        : 'border-border/40 bg-card/60 hover:border-border hover:bg-accent/40'
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1 flex flex-col gap-1.5">
-                      <div className="truncate text-sm font-semibold text-foreground leading-snug">{n.title}</div>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
-                        <span>{n.category}</span>
-                        <span>{n.updated}</span>
+          <h2 className="text-xl font-semibold">Um lugar simples para lembrar</h2>
+          <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+            Registre uma ideia, uma referência ou algo que você não quer esquecer. Só título e conteúdo.
+          </p>
+          <Button className="mt-6" onClick={handleCreate}>
+            <FilePlus2 data-icon="inline-start" className="size-4" />
+            Criar primeira nota
+          </Button>
+        </div>
+      ) : (
+        <div className="grid min-h-[620px] overflow-hidden rounded-xl border bg-card/20 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[350px_minmax(0,1fr)]">
+          <aside className="flex min-h-0 flex-col border-r bg-card/50">
+            <div className="border-b p-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={query} onChange={event => setQuery(event.target.value)} placeholder={t('notes.searchPlaceholder')} className="pl-9" />
+              </div>
+              <div className="mt-3 flex items-center justify-between px-1 text-xs text-muted-foreground">
+                <span>{totalCount} {totalCount === 1 ? 'nota' : 'notas'}</span>
+                {query && <button type="button" className="font-medium text-foreground hover:underline" onClick={() => setQuery('')}>Limpar busca</button>}
+              </div>
+            </div>
+
+            <ScrollArea className="h-[540px] flex-1">
+              {notes.length === 0 ? (
+                <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+                  <Search className="mb-3 size-5 text-muted-foreground" />
+                  <p className="text-sm font-medium">Nenhuma nota encontrada</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Tente buscar por outro título ou conteúdo.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5 p-3">
+                  {notes.map(note => {
+                    const id = noteId(note)
+                    const isActive = id === selectedId
+                    const preview = note.content.replace(/\s+/g, ' ').trim() || 'Nota vazia'
+                    return (
+                      <div key={id} className={`group flex items-start gap-1 rounded-lg border p-1 transition-colors ${isActive ? 'border-primary/40 bg-accent text-accent-foreground' : 'border-transparent hover:border-border hover:bg-accent/50'}`}>
+                        <button type="button" onClick={() => setSelectedId(id)} className="min-w-0 flex-1 px-2 py-2 text-left">
+                          <div className="truncate text-sm font-semibold leading-snug">{note.title || 'Sem título'}</div>
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{preview}</p>
+                          <div className="mt-2 text-[11px] text-muted-foreground">{note.updated}</div>
+                        </button>
+                        <DestructiveConfirmDialog
+                          title="Excluir esta nota?"
+                          description={`“${note.title || 'Sem título'}” será apagada permanentemente.`}
+                          confirmLabel="Excluir nota"
+                          onConfirm={() => deleteNote(id)}
+                          trigger={
+                            <Button size="icon" variant="ghost" className="mt-1 size-7 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100" aria-label={`Excluir nota ${note.title || 'sem título'}`}>
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          }
+                        />
                       </div>
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteNote((n as unknown as { _dbId?: string })._dbId || String(n.id))
-                      }}
-                      className="size-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all shrink-0 -mr-1 -mt-1"
-                      aria-label={`Excluir nota ${n.title}`}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
-          </ScrollArea>
-        </aside>
-        <section className="flex flex-col bg-background min-w-0 flex-1">
-          <div className="flex items-center gap-3 border-b px-8 py-4 bg-muted/20">
-            <Badge variant="outline" className="font-mono text-xs">{active.category}</Badge>
-            {active.link && <span className="text-xs text-muted-foreground font-mono">· {active.link}</span>}
-          </div>
-          <div className="w-full flex-1 flex flex-col gap-6 p-8 lg:p-10">
-            <Input
-              value={active.title}
-              onChange={e => handleUpdate({ title: e.target.value })}
-              className="h-auto border-0 p-0 text-3xl lg:text-4xl font-bold tracking-tight shadow-none focus-visible:ring-0 text-foreground"
-              placeholder="Título da nota..."
-            />
-            <div className="font-mono text-xs text-muted-foreground tracking-wider uppercase">
-              {t('notes.updatedLabel')} {active.updated}
-            </div>
-            <Textarea
-              value={active.content}
-              onChange={e => handleUpdate({ content: e.target.value, updated: 'agora' })}
-              className="min-h-[500px] flex-1 w-full resize-none border-0 p-0 font-mono text-sm leading-relaxed shadow-none focus-visible:ring-0 text-foreground/90"
-              placeholder="Digite seu conteúdo..."
-            />
-          </div>
-        </section>
-      </div>
+                    )
+                  })}
+                  <InfiniteScrollSentinel hasMore={hasMore} loading={loadingMore} onLoadMore={fetchNextPage} labelEnd="Todas as notas foram carregadas" />
+                </div>
+              )}
+            </ScrollArea>
+          </aside>
+
+          <section className="flex min-w-0 flex-1 flex-col bg-background">
+            {active ? (
+              <>
+                <div className="flex h-14 items-center justify-between border-b px-6 lg:px-8">
+                  <span className="text-xs text-muted-foreground">Atualizada {active.updated}</span>
+                  <span aria-live="polite" className={`text-xs ${saveState === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {saveState === 'saving' ? 'Salvando...' : saveState === 'saved' ? 'Salvo' : saveState === 'error' ? 'Erro ao salvar' : ''}
+                  </span>
+                </div>
+                <div className="flex w-full flex-1 flex-col px-7 py-8 lg:px-12 lg:py-10">
+                  <Input
+                    value={draftTitle}
+                    maxLength={200}
+                    onChange={event => setDraftTitle(event.target.value)}
+                    onBlur={() => { if (!draftTitle.trim()) setDraftTitle('Sem título') }}
+                    className="h-auto border-0 bg-transparent p-0 text-3xl font-semibold tracking-tight shadow-none focus-visible:ring-0 dark:bg-transparent lg:text-4xl"
+                    placeholder="Título"
+                    aria-label="Título da nota"
+                  />
+                  <Separator className="my-7" />
+                  <Textarea
+                    value={draftContent}
+                    onChange={event => setDraftContent(event.target.value)}
+                    className="min-h-[430px] w-full flex-1 resize-none border-0 bg-transparent p-0 text-base leading-7 shadow-none focus-visible:ring-0 dark:bg-transparent"
+                    placeholder="Escreva o que você precisa lembrar..."
+                    aria-label="Conteúdo da nota"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center px-6 text-center text-muted-foreground">
+                <StickyNote className="mb-3 size-6" />
+                <p className="text-sm">Selecione uma nota para começar.</p>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </>
   )
 }

@@ -164,19 +164,22 @@ pub struct UpdateReviewProgressPayload {
 pub struct Note {
     pub id: String,
     pub title: String,
-    pub category: String,
-    pub link: String,
     pub content: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct NotesQueryPayload {
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+    pub search: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateNotePayload {
     pub id: String,
     pub title: Option<String>,
-    pub category: Option<String>,
-    pub link: Option<String>,
     pub content: Option<String>,
 }
 

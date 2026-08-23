@@ -36,6 +36,11 @@ fn run_migrations(conn: &Connection) -> SqlResult<()> {
             value TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS app_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
@@ -78,6 +83,8 @@ fn run_migrations(conn: &Connection) -> SqlResult<()> {
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+
+        CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updated_at DESC);
 
         CREATE TABLE IF NOT EXISTS accounts (
             id TEXT PRIMARY KEY,
@@ -197,8 +204,32 @@ fn run_migrations(conn: &Connection) -> SqlResult<()> {
 }
 
 fn seed_if_empty(conn: &Connection) -> SqlResult<()> {
-    let task_count: i64 = conn.query_row("SELECT COUNT(*) FROM tasks", [], |r| r.get(0)).unwrap_or(0);
-    if task_count >= 10 {
+    let seed_completed: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM app_meta WHERE key = 'demo_seed_v1')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if seed_completed {
+        return Ok(());
+    }
+
+    // Existing installations may predate the marker. Any user or demo data means
+    // initialization already happened; marking it prevents deleted data from being
+    // recreated on a later launch.
+    let existing_records: i64 = conn
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM tasks) + (SELECT COUNT(*) FROM roadmaps) + (SELECT COUNT(*) FROM notes) + (SELECT COUNT(*) FROM accounts)",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    if existing_records > 0 {
+        conn.execute(
+            "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('demo_seed_v1', datetime('now'))",
+            [],
+        )?;
         return Ok(());
     }
 
@@ -337,9 +368,34 @@ fn seed_if_empty(conn: &Connection) -> SqlResult<()> {
             '[{"s":"Cálculo","v":8.5},{"s":"Rust","v":6.2},{"s":"Inglês","v":5.1},{"s":"Física","v":3.8}]',
             '[{"d":"M","p":3,"a":2.8},{"d":"T","p":4,"a":3.8},{"d":"W","p":3,"a":2.2},{"d":"T","p":4,"a":4.4},{"d":"F","p":3,"a":3.1},{"d":"S","p":2,"a":1.4},{"d":"S","p":3,"a":2.5}]'
         );
+
+        INSERT OR REPLACE INTO app_meta (key, value) VALUES ('demo_seed_v1', datetime('now'));
         "#,
     )?;
 
     tx.commit()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deleted_notes_are_not_seeded_again() {
+        let connection = Connection::open_in_memory().unwrap();
+        run_migrations(&connection).unwrap();
+        let initial_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))
+            .unwrap();
+        assert!(initial_count > 0);
+
+        connection.execute("DELETE FROM notes", []).unwrap();
+        run_migrations(&connection).unwrap();
+
+        let count_after_restart: i64 = connection
+            .query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count_after_restart, 0);
+    }
 }

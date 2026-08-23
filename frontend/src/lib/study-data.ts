@@ -55,9 +55,15 @@ export const roadmaps: Roadmap[] = [
   { name: 'Física I', code: 'PHY110', progress: 31, hours: 13, streak: 3, next: 'Leis de Newton', steps: [{ title: 'Grandezas e vetores', status: 'done', mastery: 82 }, { title: 'Cinemática', status: 'active', mastery: 57 }, { title: 'Leis de Newton', status: 'locked', mastery: 0 }, { title: 'Energia', status: 'locked', mastery: 0 }, { title: 'Momento', status: 'locked', mastery: 0 }] },
 ]
 
-export type Note = { id: number; title: string; category: string; link: string; updated: string; content: string }
+export type Note = {
+  id: number | string
+  _dbId?: string
+  title: string
+  updated: string
+  content: string
+}
 export const initialNotes: Note[] = [
-  { id: 1, title: 'Regras de derivação', category: 'Cálculo', link: 'Cálculo I / Etapa 3', updated: 'há 12 min', content: '# Regras de derivação\n\n## Regra do produto\n\nSe **f** e **g** são diferenciáveis, então:\n\n(fg)′ = f′g + fg′\n\n## Pontos de atenção\n\n- Não distribuir a derivada sobre o produto.\n- Simplificar a expressão antes de derivar.\n- Verificar o domínio da função resultante.' },
-  { id: 2, title: 'Ownership mental model', category: 'Rust', link: 'Rust / Ownership', updated: 'ontem', content: '# Ownership mental model\n\nCada valor em Rust possui uma variável chamada owner. Só pode existir um owner por vez. Quando o owner sai do escopo, o valor é descartado.' },
-  { id: 3, title: 'C1 vocabulary — week 8', category: 'Inglês', link: 'English C1', updated: '2 dias', content: '# Vocabulary — week 8\n\n- **ubiquitous** — found everywhere\n- **nuanced** — characterized by subtle distinctions\n- **convey** — communicate or make known' },
+  { id: 1, title: 'Regras de derivação', updated: 'há 12 min', content: 'Regra do produto: (fg)′ = f′g + fg′. Não distribuir a derivada sobre o produto e verificar o domínio do resultado.' },
+  { id: 2, title: 'Ownership mental model', updated: 'ontem', content: 'Cada valor em Rust possui um owner. Só pode existir um owner por vez. Quando ele sai do escopo, o valor é descartado.' },
+  { id: 3, title: 'C1 vocabulary — week 8', updated: 'há 2 dias', content: 'ubiquitous — found everywhere\nnuanced — characterized by subtle distinctions\nconvey — communicate or make known' },
 ]

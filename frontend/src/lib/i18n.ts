@@ -134,9 +134,9 @@ const ptBR = {
   'calendar.reviewStrategySubtitle': 'Ajuste os intervalos por roadmap.',
 
   // Notes View
-  'notes.eyebrow': 'Base de conhecimento',
+  'notes.eyebrow': 'Anotações rápidas',
   'notes.title': 'Notas',
-  'notes.detail': 'Transforme sessões de estudo em uma rede de ideias úteis.',
+  'notes.detail': 'Guarde ideias e lembretes importantes sem complicação.',
   'notes.newNote': 'Nova nota',
   'notes.searchPlaceholder': 'Buscar notas...',
   'notes.updatedLabel': 'ATUALIZADO',
@@ -311,7 +311,7 @@ const enUS: typeof ptBR = {
   // Notes View
   'notes.eyebrow': 'Knowledge base',
   'notes.title': 'Notes',
-  'notes.detail': 'Turn study sessions into a network of useful, retrievable ideas.',
+  'notes.detail': 'Keep important ideas and reminders without the clutter.',
   'notes.newNote': 'New note',
   'notes.searchPlaceholder': 'Search notes...',
   'notes.updatedLabel': 'UPDATED',
@@ -461,7 +461,7 @@ const es: Partial<Record<TranslationKey, string>> = {
   // Notes View
   'notes.eyebrow': 'Base de conocimiento',
   'notes.title': 'Notas',
-  'notes.detail': 'Convierte tus sesiones de estudio en una red de ideas útiles.',
+  'notes.detail': 'Guarda ideas y recordatorios importantes sin complicaciones.',
   'notes.newNote': 'Nueva nota',
   'notes.searchPlaceholder': 'Buscar notas...',
 
@@ -593,7 +593,7 @@ const fr: Partial<Record<TranslationKey, string>> = {
   // Notes View
   'notes.eyebrow': 'Base de connaissances',
   'notes.title': 'Notes',
-  'notes.detail': 'Transformez vos sessions d\'étude en un réseau d\'idées utiles.',
+  'notes.detail': 'Gardez vos idées et rappels importants en toute simplicité.',
   'notes.newNote': 'Nouvelle note',
   'notes.searchPlaceholder': 'Rechercher des notes...',
 
