@@ -19,6 +19,7 @@ pub fn run() {
             // Roadmaps
             commands::roadmaps::get_roadmaps,
             commands::roadmaps::create_roadmap,
+            commands::roadmaps::update_roadmap,
             commands::roadmaps::add_roadmap_step,
             commands::roadmaps::delete_roadmap,
             commands::roadmaps::clear_all_roadmaps,

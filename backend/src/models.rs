@@ -86,6 +86,14 @@ pub struct CreateRoadmapPayload {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UpdateRoadmapPayload {
+    pub id: String,
+    pub name: String,
+    pub code: String,
+    pub steps: Vec<CreateStepPayload>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct CreateStepPayload {
     pub title: String,
     pub status: Option<String>,
@@ -254,4 +262,3 @@ pub struct DashboardAnalytics {
     pub planned_vs_actual_json: String,
     pub updated_at: String,
 }
-

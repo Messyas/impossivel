@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, Plus, Trash2 } from 'lucide-react'
 import type { Roadmap, Task } from '@/lib/study-data'
 import { Button } from '@/components/ui/button'
@@ -108,8 +108,8 @@ export function TaskCreateDialog({ onCreate, trigger }: { onCreate: (task: Task)
   )
 }
 
-type StepDraft = { title: string; description: string; checklist: string[]; hours: string; mastery: boolean; difficulty: string }
-const newStep = (title = 'Nova Etapa'): StepDraft => ({ title, description: '', checklist: ['Compreender os conceitos fundamentais'], hours: '4h', mastery: true, difficulty: 'Média' })
+type StepDraft = { title: string; description: string; checklist: string[]; hours: string; difficulty: string }
+const newStep = (title = 'Nova Etapa'): StepDraft => ({ title, description: '', checklist: ['Compreender os conceitos fundamentais'], hours: '4h', difficulty: 'Média' })
 
 function StepEditor({ step, onChange }: { step: StepDraft; onChange: (s: StepDraft) => void }) {
   const [item, setItem] = useState('')
@@ -138,26 +138,30 @@ function StepEditor({ step, onChange }: { step: StepDraft; onChange: (s: StepDra
         <Field><FieldLabel>Tempo estimado de estudo</FieldLabel><Input value={step.hours} onChange={e => onChange({...step, hours: e.target.value})} /></Field>
         <SelectField label="Dificuldade inicial" value={step.difficulty} onChange={difficulty => onChange({...step, difficulty})} options={['Fácil', 'Média', 'Difícil']} />
       </div>
-      <label className="flex items-center gap-3 text-sm">
-        <Checkbox checked={step.mastery} onCheckedChange={v => onChange({...step, mastery: Boolean(v)})} />
-        Acompanhar taxa de domínio nesta etapa
-      </label>
     </div>
   )
 }
 
-export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap) => void }) {
+function RoadmapEditorDialog({ roadmap, onSubmit, trigger }: { roadmap?: Roadmap; onSubmit: (roadmap: Roadmap) => void; trigger: React.ReactElement }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [goal, setGoal] = useState('')
   const [weekly, setWeekly] = useState('5h / semana')
   const [status, setStatus] = useState('Ativo')
-  const [steps, setSteps] = useState<StepDraft[]>([newStep('Primeira etapa')])
+  const [steps, setSteps] = useState<StepDraft[]>([])
   const [strategy, setStrategy] = useState('Intervalos fixos')
   const [intervals, setIntervals] = useState(['0', '1', '3', '7', '30', '90'])
   const [days, setDays] = useState(['Seg', 'Qua', 'Sex'])
   const [session, setSession] = useState('50 min')
+
+  useEffect(() => {
+    if (!open) return
+    setName(roadmap?.name ?? '')
+    setDescription('')
+    setGoal('')
+    setSteps(roadmap?.steps.length ? roadmap.steps.map(step => newStep(step.title)) : [newStep('Primeira etapa')])
+  }, [open, roadmap])
 
   const updateStep = (i: number, step: StepDraft) => setSteps(v => v.map((s, j) => j === i ? step : s))
   const move = (i: number, d: number) => {
@@ -167,31 +171,28 @@ export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap)
     ;[copy[i], copy[n]] = [copy[n], copy[i]]
     setSteps(copy)
   }
-  const create = () => {
+  const save = () => {
     if (!name.trim()) return
-    onCreate({
+    onSubmit({
+      ...(roadmap ?? { code: `MAP${String(Date.now()).slice(-3)}`, progress: 0, hours: 0, streak: 0 }),
       name: name.trim(),
-      code: `MAP${String(Date.now()).slice(-3)}`,
-      progress: 0,
-      hours: 0,
-      streak: 0,
       next: steps[0]?.title ?? 'Primeira etapa',
-      steps: steps.map((s, i) => ({ title: s.title || `Etapa ${i + 1}`, status: i === 0 ? 'active' : 'locked', mastery: 0 })),
+      steps: steps.map((s, i) => ({
+        title: s.title || `Etapa ${i + 1}`,
+        status: roadmap?.steps[i]?.status ?? (i === 0 ? 'active' : 'locked'),
+        mastery: roadmap?.steps[i]?.mastery ?? 0,
+      })),
     })
-    setName('')
-    setDescription('')
-    setGoal('')
-    setSteps([newStep('Primeira etapa')])
     setOpen(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button><Plus data-icon="inline-start" />Novo Roadmap</Button>} />
+      <DialogTrigger render={trigger} />
       <DialogContent className="flex h-[calc(100dvh-2rem)] max-h-[88vh] flex-col overflow-hidden sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Criar Novo Roadmap de Aprendizagem</DialogTitle>
-          <DialogDescription>Monte uma trilha deliberada de estudos com etapas e revisões.</DialogDescription>
+          <DialogTitle>{roadmap ? 'Editar Roadmap de Aprendizagem' : 'Criar Novo Roadmap de Aprendizagem'}</DialogTitle>
+          <DialogDescription>{roadmap ? 'Atualize a trilha, as etapas e as preferências de estudo.' : 'Monte uma trilha deliberada de estudos com etapas e revisões.'}</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto pr-4">
           <div className="flex flex-col gap-8 py-1">
@@ -299,11 +300,19 @@ export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap)
         <Separator />
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
-          <Button disabled={!name.trim()} onClick={create}>Criar Roadmap</Button>
+          <Button disabled={!name.trim()} onClick={save}>{roadmap ? 'Salvar alterações' : 'Criar Roadmap'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
+}
+
+export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap) => void }) {
+  return <RoadmapEditorDialog onSubmit={onCreate} trigger={<Button><Plus data-icon="inline-start" />Novo Roadmap</Button>} />
+}
+
+export function RoadmapEditDialog({ roadmap, onSave }: { roadmap: Roadmap; onSave: (roadmap: Roadmap) => void }) {
+  return <RoadmapEditorDialog roadmap={roadmap} onSubmit={onSave} trigger={<button type="button" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">Editar roadmap</button>} />
 }
 
 export function StepCreateDialog({ steps, onCreate }: { steps: Roadmap['steps']; onCreate: (step: Roadmap['steps'][number], after: string) => void }) {

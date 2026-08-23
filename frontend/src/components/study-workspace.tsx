@@ -47,7 +47,7 @@ export function StudyWorkspace() {
   useEffect(() => { if (!running || seconds <= 0) return; const id = window.setInterval(() => setSeconds(v => v - 1), 1000); return () => window.clearInterval(id) }, [running, seconds])
   const startFocus = (title: string, minutes = 25) => { setFocus(title); setSeconds(minutes * 60); setRunning(true) }
 
-  return <main className="min-h-screen bg-background text-foreground">
+  return <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
     <header data-tauri-drag-region className="sticky top-0 z-40 border-b bg-background select-none">
       <div data-tauri-drag-region className="flex h-16 w-full items-center gap-6 pl-6 lg:pl-8">
         <div data-tauri-drag-region className="flex h-full shrink-0 items-center" aria-label="Study OS">
@@ -129,7 +129,7 @@ export function StudyWorkspace() {
         <WindowControls />
       </div>
     </header>
-    <div className="w-full px-6 lg:px-8 py-6">
+    <div className="w-full min-w-0 px-6 py-6 lg:px-8">
       <ViewPanel id="todo" activeView={view}><TodoView onFocus={startFocus} activeFocus={{ title: focus, seconds, running, toggleRunning: () => setRunning(v => !v) }} /></ViewPanel>
       <ViewPanel id="roadmaps" activeView={view}><RoadmapsView onFocus={startFocus} /></ViewPanel>
       <ViewPanel id="calendar" activeView={view}><CalendarView onFocus={startFocus} /></ViewPanel>

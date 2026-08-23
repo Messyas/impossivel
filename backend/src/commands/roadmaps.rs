@@ -1,7 +1,7 @@
 use tauri::State;
 use uuid::Uuid;
 use crate::db::Database;
-use crate::models::{Roadmap, RoadmapStep, RoadmapWithSteps, CreateRoadmapPayload, AddStepPayload, PaginatedResponse, PaginationQueryPayload};
+use crate::models::{Roadmap, RoadmapStep, RoadmapWithSteps, CreateRoadmapPayload, UpdateRoadmapPayload, AddStepPayload, PaginatedResponse, PaginationQueryPayload};
 
 #[tauri::command]
 pub fn get_roadmaps(
@@ -131,6 +131,34 @@ pub fn create_roadmap(db: State<'_, Database>, payload: CreateRoadmapPayload) ->
     };
 
     Ok(RoadmapWithSteps { roadmap, steps })
+}
+
+#[tauri::command]
+pub fn update_roadmap(db: State<'_, Database>, payload: UpdateRoadmapPayload) -> Result<(), String> {
+    let mut conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let transaction = conn.transaction().map_err(|e| e.to_string())?;
+    let next_step = payload.steps.first().map(|step| step.title.as_str());
+
+    transaction.execute(
+        "UPDATE roadmaps SET name = ?1, code = ?2, next_step = ?3 WHERE id = ?4",
+        rusqlite::params![payload.name, payload.code, next_step, payload.id],
+    ).map_err(|e| e.to_string())?;
+
+    transaction.execute("DELETE FROM roadmap_steps WHERE roadmap_id = ?1", [&payload.id])
+        .map_err(|e| e.to_string())?;
+
+    for (index, step) in payload.steps.iter().enumerate() {
+        let step_id = Uuid::new_v4().to_string();
+        let status = step.status.as_deref().unwrap_or(if index == 0 { "active" } else { "locked" });
+        let mastery = step.mastery.unwrap_or(0);
+        transaction.execute(
+            "INSERT INTO roadmap_steps (id, roadmap_id, title, status, mastery, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![step_id, payload.id, step.title, status, mastery, index as i64],
+        ).map_err(|e| e.to_string())?;
+    }
+
+    transaction.commit().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]

@@ -355,6 +355,22 @@ export function useRoadmaps() {
     }
   }
 
+  const updateRoadmap = async (roadmap: Roadmap & { _dbId?: string }) => {
+    const dbId = roadmap._dbId
+    setRoadmapsList(prev => prev.map(item => ((item as Roadmap & { _dbId?: string })._dbId === dbId || (!dbId && item.name === roadmap.name)) ? roadmap : item))
+    if (isTauri() && dbId) {
+      await safeInvoke('update_roadmap', {
+        payload: {
+          id: dbId,
+          name: roadmap.name,
+          code: roadmap.code,
+          steps: roadmap.steps.map(step => ({ title: step.title, status: step.status, mastery: step.mastery })),
+        },
+      }).catch(console.error)
+      await reloadRoadmaps()
+    }
+  }
+
   const deleteRoadmap = async (roadmap: Roadmap & { _dbId?: string }) => {
     const dbId = (roadmap as unknown as { _dbId?: string })._dbId
     setRoadmapsList(prev => prev.filter(r => r.name !== roadmap.name && (r as unknown as { _dbId?: string })._dbId !== dbId))
@@ -371,7 +387,7 @@ export function useRoadmaps() {
     }
   }
 
-  return { roadmaps: roadmapsList, setRoadmapsList, loading, loadingMore, page, totalCount, totalPages, hasMore, fetchNextPage, createRoadmap, addStep, deleteRoadmap, clearAllRoadmaps, reloadRoadmaps }
+  return { roadmaps: roadmapsList, setRoadmapsList, loading, loadingMore, page, totalCount, totalPages, hasMore, fetchNextPage, createRoadmap, updateRoadmap, addStep, deleteRoadmap, clearAllRoadmaps, reloadRoadmaps }
 }
 
 // ── Notes Hook ─────────────────────────────────────────────────────────────
