@@ -9,7 +9,8 @@
     "tauri": "npm --prefix backend run tauri",
     "tauri:dev": "npm --prefix backend run tauri dev",
     "tauri:build": "npm --prefix backend run tauri build",
-    "check:backend": "cd backend && cargo check"
+    "check:backend": "cd backend && cargo check",
+    "benchmark": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/benchmark-tauri.ps1"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
