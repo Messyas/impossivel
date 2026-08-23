@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
@@ -154,8 +153,7 @@ export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap)
   const [goal, setGoal] = useState('')
   const [weekly, setWeekly] = useState('5h / semana')
   const [status, setStatus] = useState('Ativo')
-  const [steps, setSteps] = useState<StepDraft[]>([newStep('Conceitos Iniciais'), newStep('Prática e Aplicação'), newStep('Consolidação Avançada')])
-  const [selected, setSelected] = useState(0)
+  const [steps, setSteps] = useState<StepDraft[]>([newStep('Primeira etapa')])
   const [strategy, setStrategy] = useState('Intervalos fixos')
   const [intervals, setIntervals] = useState(['0', '1', '3', '7', '30', '90'])
   const [days, setDays] = useState(['Seg', 'Qua', 'Sex'])
@@ -168,7 +166,6 @@ export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap)
     const copy = [...steps]
     ;[copy[i], copy[n]] = [copy[n], copy[i]]
     setSteps(copy)
-    setSelected(n)
   }
   const create = () => {
     if (!name.trim()) return
@@ -182,26 +179,27 @@ export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap)
       steps: steps.map((s, i) => ({ title: s.title || `Etapa ${i + 1}`, status: i === 0 ? 'active' : 'locked', mastery: 0 })),
     })
     setName('')
+    setDescription('')
+    setGoal('')
+    setSteps([newStep('Primeira etapa')])
     setOpen(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button><Plus data-icon="inline-start" />Novo Roadmap</Button>} />
-      <DialogContent className="flex max-h-[88vh] flex-col sm:max-w-4xl">
+      <DialogContent className="flex h-[calc(100dvh-2rem)] max-h-[88vh] flex-col overflow-hidden sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Criar Novo Roadmap de Aprendizagem</DialogTitle>
           <DialogDescription>Monte uma trilha deliberada de estudos com etapas e revisões.</DialogDescription>
         </DialogHeader>
-        <Tabs defaultValue="general" className="min-h-0 flex-1">
-          <TabsList className="w-full">
-            <TabsTrigger value="general">Geral</TabsTrigger>
-            <TabsTrigger value="steps">Etapas</TabsTrigger>
-            <TabsTrigger value="reviews">Revisões</TabsTrigger>
-            <TabsTrigger value="schedule">Cronograma</TabsTrigger>
-          </TabsList>
-          <ScrollArea className="mt-4 h-[55vh] pr-4">
-            <TabsContent value="general">
+        <div className="min-h-0 flex-1 overflow-y-auto pr-4">
+          <div className="flex flex-col gap-8 py-1">
+            <section className="flex flex-col gap-4" aria-labelledby="roadmap-general-heading">
+              <div>
+                <h3 id="roadmap-general-heading" className="text-base font-semibold">Informações gerais</h3>
+                <p className="text-sm text-muted-foreground">Defina o tema, o objetivo e o ritmo de estudo.</p>
+              </div>
               <FieldGroup>
                 <Field><FieldLabel>Nome do Roadmap</FieldLabel><Input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="ex: Cálculo I, Rust Avançado, Inglês C1" /></Field>
                 <Field><FieldLabel>Descrição da trilha</FieldLabel><Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Fundamentos e aplicações práticas." /></Field>
@@ -211,31 +209,44 @@ export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap)
                   <SelectField label="Status inicial" value={status} onChange={setStatus} options={['Planejado', 'Ativo', 'Pausado']} />
                 </div>
               </FieldGroup>
-            </TabsContent>
-            <TabsContent value="steps">
-              <div className="flex flex-col gap-4">
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {steps.map((s, i) => (
-                    <button key={i} onClick={() => setSelected(i)} className={`min-w-36 rounded-md border px-3 py-2 text-left text-sm ${selected === i ? 'bg-accent font-medium' : 'hover:bg-accent/60'}`}>
-                      <span className="block truncate">{s.title}</span>
-                      <span className="font-mono text-xs text-muted-foreground">ETAPA {i + 1}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => { setSteps(v => [...v, newStep()]); setSelected(steps.length) }}>
-                    <Plus data-icon="inline-start" />Adicionar Etapa
-                  </Button>
-                  <Button size="icon" variant="ghost" onClick={() => move(selected, -1)} aria-label="Mover para cima"><ArrowUp className="size-4" /></Button>
-                  <Button size="icon" variant="ghost" onClick={() => move(selected, 1)} aria-label="Mover para baixo"><ArrowDown className="size-4" /></Button>
-                  <Button size="icon" variant="ghost" onClick={() => { setSteps(v => v.filter((_, i) => i !== selected)); setSelected(Math.max(0, selected - 1)) }} aria-label="Remover etapa">
-                    <Trash2 className="size-4 text-destructive" />
-                  </Button>
-                </div>
-                {steps[selected] && <StepEditor step={steps[selected]} onChange={s => updateStep(selected, s)} />}
+            </section>
+
+            <Separator />
+
+            <section className="flex flex-col gap-4" aria-labelledby="roadmap-steps-heading">
+              <div>
+                <h3 id="roadmap-steps-heading" className="text-base font-semibold">Etapas</h3>
+                <p className="text-sm text-muted-foreground">Organize os conteúdos na ordem em que serão estudados.</p>
               </div>
-            </TabsContent>
-            <TabsContent value="reviews">
+              <div className="flex flex-col gap-5">
+                {steps.map((step, i) => (
+                  <div key={i} className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold">Etapa {i + 1}</span>
+                      {steps.length > 1 && <div className="flex items-center gap-1">
+                        <Button size="icon" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Mover etapa ${i + 1} para cima`}><ArrowUp className="size-4" /></Button>
+                        <Button size="icon" variant="ghost" disabled={i === steps.length - 1} onClick={() => move(i, 1)} aria-label={`Mover etapa ${i + 1} para baixo`}><ArrowDown className="size-4" /></Button>
+                        <Button size="icon" variant="ghost" onClick={() => setSteps(v => v.filter((_, j) => j !== i))} aria-label={`Remover etapa ${i + 1}`}>
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      </div>}
+                    </div>
+                    <StepEditor step={step} onChange={updatedStep => updateStep(i, updatedStep)} />
+                  </div>
+                ))}
+                <Button className="w-fit" variant="outline" onClick={() => setSteps(v => [...v, newStep()])}>
+                  <Plus data-icon="inline-start" />Adicionar outra etapa
+                </Button>
+              </div>
+            </section>
+
+            <Separator />
+
+            <section className="flex flex-col gap-4" aria-labelledby="roadmap-reviews-heading">
+              <div>
+                <h3 id="roadmap-reviews-heading" className="text-base font-semibold">Revisões</h3>
+                <p className="text-sm text-muted-foreground">Escolha como o conteúdo será retomado ao longo do tempo.</p>
+              </div>
               <FieldGroup>
                 <SelectField label="Estratégia de revisão" value={strategy} onChange={setStrategy} options={['Intervalos fixos', 'Repetição espaçada adaptativa', 'Revisão conceitual', 'Manutenção semestral']} />
                 {strategy === 'Intervalos fixos' && (
@@ -261,8 +272,15 @@ export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap)
                   <Checkbox defaultChecked />Aplicar esta estratégia a todas as etapas do roadmap
                 </label>
               </FieldGroup>
-            </TabsContent>
-            <TabsContent value="schedule">
+            </section>
+
+            <Separator />
+
+            <section className="flex flex-col gap-4" aria-labelledby="roadmap-schedule-heading">
+              <div>
+                <h3 id="roadmap-schedule-heading" className="text-base font-semibold">Cronograma</h3>
+                <p className="text-sm text-muted-foreground">Configure os dias e a duração das sessões.</p>
+              </div>
               <FieldGroup>
                 <Field>
                   <FieldLabel>Dias preferenciais de estudo</FieldLabel>
@@ -275,9 +293,9 @@ export function RoadmapCreateDialog({ onCreate }: { onCreate: (roadmap: Roadmap)
                 <SelectField label="Duração típica de cada sessão" value={session} onChange={setSession} options={['25 min', '50 min', '90 min', 'Personalizado']} />
                 <Field><FieldLabel>Horário preferencial</FieldLabel><Input type="time" className="max-w-48" /></Field>
               </FieldGroup>
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
+            </section>
+          </div>
+        </div>
         <Separator />
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
@@ -317,4 +335,3 @@ export function StepCreateDialog({ steps, onCreate }: { steps: Roadmap['steps'];
     </Dialog>
   )
 }
-
