@@ -130,8 +130,68 @@ fn run_migrations(conn: &Connection) -> SqlResult<()> {
         "#,
     )?;
 
+    // Additive migrations for roadmap execution and per-step review scheduling.
+    // SQLite does not support `ADD COLUMN IF NOT EXISTS`, so duplicate-column
+    // errors are intentionally ignored to keep startup migrations idempotent.
+    for migration in [
+        "ALTER TABLE roadmaps ADD COLUMN review_intervals TEXT NOT NULL DEFAULT '[0,1,3,7]'",
+        "ALTER TABLE roadmap_steps ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE roadmap_steps ADD COLUMN checklist TEXT NOT NULL DEFAULT '[\"Compreender os conceitos fundamentais\"]'",
+        "ALTER TABLE roadmap_steps ADD COLUMN checklist_state TEXT NOT NULL DEFAULT '[false]'",
+        "ALTER TABLE roadmap_steps ADD COLUMN focus_seconds INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE roadmap_steps ADD COLUMN timer_remaining INTEGER NOT NULL DEFAULT 1500",
+        "ALTER TABLE roadmap_steps ADD COLUMN completed_at TEXT",
+    ] {
+        let _ = conn.execute(migration, []);
+    }
+
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS review_occurrences (
+            id TEXT PRIMARY KEY,
+            roadmap_id TEXT NOT NULL REFERENCES roadmaps(id) ON DELETE CASCADE,
+            step_id TEXT NOT NULL REFERENCES roadmap_steps(id) ON DELETE CASCADE,
+            interval_days INTEGER NOT NULL,
+            due_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            checklist_state TEXT NOT NULL DEFAULT '[]',
+            focus_seconds INTEGER NOT NULL DEFAULT 0,
+            timer_remaining INTEGER NOT NULL DEFAULT 1500,
+            completed_at TEXT,
+            UNIQUE(step_id, interval_days)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_review_occurrences_due_date ON review_occurrences(due_date);
+        CREATE INDEX IF NOT EXISTS idx_review_occurrences_status ON review_occurrences(status);
+
+        UPDATE roadmap_steps SET status = 'available' WHERE status = 'active';
+        UPDATE roadmap_steps SET completed_at = datetime('now') WHERE status = 'done' AND completed_at IS NULL;
+        UPDATE roadmap_steps SET checklist_state = '[true]' WHERE status = 'done' AND checklist_state = '[false]';
+        "#,
+    )?;
+
     // Seed initial data if tables are empty
     seed_if_empty(conn)?;
+
+    // Existing completed stages receive their first individual review queue.
+    conn.execute_batch(
+        r#"
+        INSERT OR IGNORE INTO review_occurrences
+            (id, roadmap_id, step_id, interval_days, due_date, status, checklist_state)
+        SELECT
+            rs.id || '-review-' || CAST(schedule.value AS TEXT),
+            rs.roadmap_id,
+            rs.id,
+            CAST(schedule.value AS INTEGER),
+            date(COALESCE(rs.completed_at, datetime('now')), printf('+%d days', CAST(schedule.value AS INTEGER))),
+            'pending',
+            '[false]'
+        FROM roadmap_steps rs
+        JOIN roadmaps r ON r.id = rs.roadmap_id
+        JOIN json_each(r.review_intervals) schedule
+        WHERE rs.status = 'done';
+        "#,
+    )?;
 
     Ok(())
 }

@@ -19,6 +19,8 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { RoadmapCreateDialog, RoadmapEditDialog, TaskCreateDialog } from '@/components/creation-dialogs'
+import { FocusSessionDialog } from '@/components/focus-session-dialog'
+import { ReviewCalendarView } from '@/components/review-calendar-view'
 import { InfiniteScrollSentinel } from '@/components/ui/infinite-scroll-sentinel'
 import { DestructiveConfirmDialog } from '@/components/ui/destructive-confirm-dialog'
 import { AnimatedIcon } from '@/components/ui/animated-icon'
@@ -205,7 +207,7 @@ function TaskRow({
 }
 
 export function RoadmapsView({ onFocus }: { onFocus: (title:string,minutes?:number)=>void }) {
-  const { roadmaps: items, createRoadmap, updateRoadmap, deleteRoadmap, clearAllRoadmaps, loadingMore, hasMore, fetchNextPage } = useRoadmaps()
+  const { roadmaps: items, createRoadmap, updateRoadmap, updateStepProgress, deleteRoadmap, clearAllRoadmaps, loadingMore, hasMore, fetchNextPage } = useRoadmaps()
   const { t } = useTranslation()
   return <>
     <SectionTitle
@@ -226,15 +228,67 @@ export function RoadmapsView({ onFocus }: { onFocus: (title:string,minutes?:numb
               </Button>
             }
           />
-          <RoadmapCreateDialog onCreate={roadmap => createRoadmap({ name: roadmap.name, code: roadmap.code, steps: roadmap.steps })} />
+          <RoadmapCreateDialog onCreate={roadmap => createRoadmap({ name: roadmap.name, code: roadmap.code, reviewIntervals: roadmap.reviewIntervals, steps: roadmap.steps })} />
         </div>
       }
     />
     <div className="flex flex-col gap-5">
-      {items.map(r => <RoadmapCard key={r.name} roadmap={r} onFocus={onFocus} onDelete={() => deleteRoadmap(r)} onEdit={updateRoadmap} />)}
+      {items.map(r => <RoadmapExecutionCard key={r._dbId ?? r.name} roadmap={r} onDelete={() => deleteRoadmap(r)} onEdit={updateRoadmap} onStepSave={updateStepProgress} />)}
     </div>
     <InfiniteScrollSentinel hasMore={hasMore} loading={loadingMore} onLoadMore={fetchNextPage} labelEnd="Todos os roadmaps foram carregados" />
   </>
+}
+
+function RoadmapExecutionCard({ roadmap: r, onDelete, onEdit, onStepSave }: {
+  roadmap: Roadmap
+  onDelete: () => void
+  onEdit: (roadmap: Roadmap) => void
+  onStepSave: ReturnType<typeof useRoadmaps>['updateStepProgress']
+}) {
+  const { t } = useTranslation()
+  const completedSteps = r.steps.filter(step => step.status === 'done').length
+  const pendingSteps = r.steps.length - completedSteps
+  const progress = r.steps.length ? Math.round(completedSteps * 100 / r.steps.length) : 0
+  const statusLabel = (status: Roadmap['steps'][number]['status']) => status === 'done' ? 'Concluída' : status === 'in_progress' ? 'Em andamento' : status === 'incomplete' ? 'Incompleta' : status === 'locked' ? 'Bloqueada' : 'Disponível'
+
+  return (
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <CardDescription className="truncate">{t('roadmaps.nextStage')}: {r.next}</CardDescription>
+            <CardTitle className="mt-2 break-words text-xl">{r.name}</CardTitle>
+          </div>
+          <Button size="icon" variant="ghost" onClick={onDelete} className="size-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Excluir roadmap ${r.name}`}><Trash2 className="size-4" /></Button>
+        </div>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(10rem,0.5fr)_minmax(10rem,0.5fr)] xl:gap-x-10">
+          <div><div className="mb-2 flex justify-between text-xs"><span className="text-muted-foreground">{t('roadmaps.overallProgress')}</span><span className="font-mono">{progress}%</span></div><Progress value={progress} /></div>
+          <Metric label={t('roadmaps.timeInvested')} value={`${r.hours.toFixed(1)}h`} />
+          <Metric label="Etapas concluídas" value={`${completedSteps} de ${r.steps.length}`} />
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 text-xs text-muted-foreground"><span>{t('roadmaps.nextStage')}: <strong className="font-medium text-foreground">{r.next}</strong></span><span>Etapas pendentes: <strong className="font-mono font-medium text-foreground">{pendingSteps}</strong></span><span>Revisões: <strong className="font-mono font-medium text-foreground">{(r.reviewIntervals ?? [0, 1, 3, 7]).join(', ')}d</strong></span></div>
+        <div className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-3">
+          <div className="flex w-max min-w-max items-stretch gap-0 pr-4">
+            {r.steps.map((step, index) => {
+              const normalizedStatus = step.status === 'active' ? 'available' : step.status
+              const locked = normalizedStatus === 'locked'
+              const checks = step.checklist ?? ['Compreender os conceitos fundamentais']
+              const checkState = step.checklistState ?? checks.map(() => normalizedStatus === 'done')
+              const trigger = <button disabled={locked} className={`flex w-56 shrink-0 flex-col gap-3 rounded-lg border p-3 text-left transition-colors ${locked ? 'cursor-not-allowed opacity-60' : 'hover:border-primary/50 hover:bg-accent'} ${normalizedStatus === 'in_progress' ? 'border-primary bg-accent' : ''}`}>
+                <div className="flex w-full items-center justify-between"><span className="font-mono text-[11px] text-muted-foreground">ETAPA {String(index + 1).padStart(2, '0')}</span>{normalizedStatus === 'done' ? <Check className="size-4" /> : normalizedStatus === 'in_progress' ? <Circle className="size-4 fill-current" /> : normalizedStatus === 'incomplete' ? <Pause className="size-4" /> : <Circle className="size-4 text-muted-foreground" />}</div>
+                <div><div className="truncate text-sm font-medium">{step.title}</div><div className="mt-1 text-xs text-muted-foreground">{statusLabel(normalizedStatus)}</div></div>
+                <Progress value={checks.length ? checkState.filter(Boolean).length * 100 / checks.length : 0} />
+              </button>
+              return <div key={step._dbId ?? `${step.title}-${index}`} className="flex items-center"><FocusSessionDialog title={step.title} subtitle={`${r.name} · Etapa ${index + 1}`} description={step.description} status={normalizedStatus === 'locked' ? 'available' : normalizedStatus} checklist={checks} checklistState={checkState} focusSeconds={step.focusSeconds} timerRemaining={step.timerRemaining} trigger={trigger} onSave={update => onStepSave(step, update)} />{index < r.steps.length - 1 && <span aria-hidden="true" className="h-px w-6 shrink-0 bg-border" />}</div>
+            })}
+          </div>
+        </div>
+        <div className="flex justify-end"><RoadmapEditDialog roadmap={r} onSave={onEdit} /></div>
+      </CardContent>
+    </Card>
+  )
 }
 
 function RoadmapCard({ roadmap: r, onFocus, onDelete, onEdit }: { roadmap: Roadmap; onFocus:(t:string,m?:number)=>void; onDelete: () => void; onEdit: (roadmap: Roadmap) => void }) {
@@ -262,11 +316,15 @@ function YearOverview({ year, onYearChange }: { year:number; onYearChange:(year:
   return <div className="flex flex-col gap-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><Button variant="outline" size="icon" onClick={()=>onYearChange(year-1)} aria-label="Ano anterior"><ChevronLeft /></Button><span className="min-w-20 text-center font-mono text-lg">{year}</span><Button variant="outline" size="icon" onClick={()=>onYearChange(year+1)} aria-label="Próximo ano"><ChevronRightIcon /></Button></div><Button variant="ghost" size="sm" onClick={()=>onYearChange(new Date().getFullYear())}>Hoje</Button></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{months.map((month,index)=><Card key={month} className="overflow-hidden"><CardHeader className="px-3 pb-1 pt-3"><CardTitle className="text-sm">{month}</CardTitle><CardDescription>{year}</CardDescription></CardHeader><CardContent className="px-2 pb-2"><Calendar mode="multiple" month={new Date(year,index,1)} selected={roadmapDates.filter(date=>date.getMonth()===index)} hideNavigation fixedWeeks showOutsideDays={false} className="mx-auto p-0" modifiers={{ roadmap: roadmapDates.filter(date=>date.getMonth()===index) }} modifiersClassNames={{ roadmap: 'bg-accent font-semibold text-foreground' }} locale={ptBR} /></CardContent></Card>)}</div><div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Roadmaps</span>{roadmaps.map((roadmap,index)=><span key={roadmap.name} className="flex items-center gap-1.5"><span className={`size-2 rounded-full ${roadmapColors[index % roadmapColors.length]}`} />{roadmap.name}</span>)}</div></div>
 }
 
-export function CalendarView({ onFocus }: { onFocus:(t:string,m?:number)=>void }) {
+function LegacyCalendarView({ onFocus }: { onFocus:(t:string,m?:number)=>void }) {
   const [mode,setMode]=useState('week'); const [year,setYear]=useState(new Date().getFullYear());
   const { roadmaps } = useRoadmaps()
   const { t } = useTranslation()
   return <><SectionTitle eyebrow={t('calendar.eyebrow')} title={t('calendar.title')} detail={t('calendar.detail')} action={<Tabs value={mode} onValueChange={setMode}><TabsList><TabsTrigger value="week">{t('calendar.week')}</TabsTrigger><TabsTrigger value="month">{t('calendar.month')}</TabsTrigger><TabsTrigger value="year">{t('calendar.year')}</TabsTrigger><TabsTrigger value="agenda">{t('calendar.agenda')}</TabsTrigger></TabsList></Tabs>} />{mode==='year' ? <YearOverview year={year} onYearChange={setYear} /> : mode==='week' ? <div className="max-w-full overflow-x-auto rounded-xl border"><div className="grid min-w-[1000px] grid-cols-7">{days.map((d,i)=><div key={d} className="min-h-[520px] border-r last:border-r-0"><div className={`border-b p-4 ${i===1?'bg-accent':''}`}><span className="font-mono text-xs">{d}</span></div><div className="flex flex-col gap-2 p-2">{i<5 && <Session title="Daily Review" time="08:00 · 1h" onClick={()=>onFocus('Daily Review',60)} />}{i===1 && <><Session title="Derivadas" time="10:00 · 50m" onClick={()=>onFocus('Derivadas',50)} /><Session title="Rust practice" time="14:30 · 50m" onClick={()=>onFocus('Rust practice',50)} /></>}{i===3 && <Session title="Physics list" time="16:00 · 90m" onClick={()=>onFocus('Physics list',90)} />}</div></div>)}</div></div> : mode==='month' ? <div className="grid grid-cols-7 overflow-hidden rounded-xl border">{Array.from({length:35},(_,i)=><div key={i} className="min-h-28 border-b border-r p-3 text-xs"><span className="font-mono text-muted-foreground">{i+1}</span>{[3,8,12,18,24,29].includes(i) && <div className="mt-4 rounded bg-accent p-2">Daily Review · 1h</div>}</div>)}</div> : <div className="flex flex-col gap-2">{days.slice(0,5).map((d,i)=><Card key={d} className="py-0"><CardContent className="flex items-center gap-5 py-4"><span className="w-20 font-mono text-xs">{d}</span><div className="flex-1"><div className="text-sm font-medium">Daily Review</div><div className="text-xs text-muted-foreground">Roadmaps ativos · prioridade média</div></div><Badge variant="outline">08:00–09:00</Badge><Button size="sm" onClick={()=>onFocus('Daily Review',60)}>{t('header.start')}</Button></CardContent></Card>)}</div>}<Card className="mt-6"><CardHeader><CardTitle className="text-base">{t('calendar.reviewStrategyTitle')}</CardTitle><CardDescription>{t('calendar.reviewStrategyDesc')}</CardDescription><CardAction><Dialog><DialogTrigger render={<Button variant="outline" size="sm">{t('calendar.configure')}</Button>} /><DialogContent><DialogHeader><DialogTitle>{t('calendar.reviewStrategyTitle')}</DialogTitle><DialogDescription>{t('calendar.reviewStrategySubtitle')}</DialogDescription></DialogHeader>{roadmaps.map(r=><div key={r.name} className="flex items-center gap-3"><span className="flex-1 text-sm">{r.name}</span><Input defaultValue="1, 3, 7, 14, 30" className="w-44 font-mono" /></div>)}<Button>{t('common.save')}</Button></DialogContent></Dialog></CardAction></CardHeader></Card></>
+}
+
+export function CalendarView({ onFocus: _onFocus }: { onFocus:(t:string,m?:number)=>void }) {
+  return <ReviewCalendarView />
 }
 
 function Session({title,time,onClick}:{title:string;time:string;onClick:()=>void}) { return <button onClick={onClick} className="flex flex-col gap-1 rounded-md border bg-card p-3 text-left hover:bg-accent"><span className="text-xs font-medium">{title}</span><span className="font-mono text-[11px] text-muted-foreground">{time}</span></button> }

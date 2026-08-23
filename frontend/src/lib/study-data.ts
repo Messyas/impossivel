@@ -8,7 +8,46 @@ export const initialTasks: Task[] = [
   { id: 5, title: 'Capítulo 6 — Lifetimes', group: 'Próximas', subject: 'Rust', duration: 50, priority: 'Média', done: false, due: 'Qua, 20' },
 ]
 
-export type Roadmap = { name: string; code: string; progress: number; hours: number; streak: number; next: string; steps: { title: string; status: 'done' | 'active' | 'locked'; mastery: number }[] }
+export type RoadmapStepStatus = 'locked' | 'available' | 'active' | 'in_progress' | 'incomplete' | 'done'
+export type RoadmapStep = {
+  _dbId?: string
+  title: string
+  status: RoadmapStepStatus
+  mastery: number
+  description?: string
+  checklist?: string[]
+  checklistState?: boolean[]
+  focusSeconds?: number
+  timerRemaining?: number
+  completedAt?: string
+}
+export type Roadmap = {
+  _dbId?: string
+  name: string
+  code: string
+  progress: number
+  hours: number
+  streak: number
+  next: string
+  reviewIntervals?: number[]
+  steps: RoadmapStep[]
+}
+
+export type ReviewOccurrence = {
+  id: string
+  roadmapId: string
+  roadmapName: string
+  stepId: string
+  stepTitle: string
+  intervalDays: number
+  dueDate: string
+  status: 'pending' | 'in_progress' | 'incomplete' | 'done'
+  checklist: string[]
+  checklistState: boolean[]
+  focusSeconds: number
+  timerRemaining: number
+  completedAt?: string
+}
 export const roadmaps: Roadmap[] = [
   { name: 'Cálculo I', code: 'MAT101', progress: 64, hours: 28, streak: 8, next: 'Aplicações de derivadas', steps: [{ title: 'Limites e continuidade', status: 'done', mastery: 92 }, { title: 'Definição de derivada', status: 'done', mastery: 84 }, { title: 'Regras de derivação', status: 'active', mastery: 68 }, { title: 'Aplicações de derivadas', status: 'locked', mastery: 0 }, { title: 'Integrais', status: 'locked', mastery: 0 }] },
   { name: 'Rust', code: 'DEV204', progress: 47, hours: 19, streak: 5, next: 'Lifetimes', steps: [{ title: 'Fundamentos', status: 'done', mastery: 88 }, { title: 'Ownership', status: 'done', mastery: 79 }, { title: 'Structs & enums', status: 'active', mastery: 61 }, { title: 'Lifetimes', status: 'locked', mastery: 0 }, { title: 'Concorrência', status: 'locked', mastery: 0 }] },

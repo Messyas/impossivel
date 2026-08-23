@@ -58,6 +58,7 @@ pub struct Roadmap {
     pub hours: f64,
     pub streak: i64,
     pub next_step: Option<String>,
+    pub review_intervals: Vec<i64>,
     pub created_at: String,
 }
 
@@ -69,6 +70,12 @@ pub struct RoadmapStep {
     pub status: String,
     pub mastery: i64,
     pub sort_order: i64,
+    pub description: String,
+    pub checklist: Vec<String>,
+    pub checklist_state: Vec<bool>,
+    pub focus_seconds: i64,
+    pub timer_remaining: i64,
+    pub completed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +90,7 @@ pub struct CreateRoadmapPayload {
     pub name: String,
     pub code: Option<String>,
     pub steps: Vec<CreateStepPayload>,
+    pub review_intervals: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,13 +99,20 @@ pub struct UpdateRoadmapPayload {
     pub name: String,
     pub code: String,
     pub steps: Vec<CreateStepPayload>,
+    pub review_intervals: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateStepPayload {
+    pub id: Option<String>,
     pub title: String,
     pub status: Option<String>,
-    pub mastery: Option<i64>,
+    pub description: Option<String>,
+    pub checklist: Option<Vec<String>>,
+    pub checklist_state: Option<Vec<bool>>,
+    pub focus_seconds: Option<i64>,
+    pub timer_remaining: Option<i64>,
+    pub completed_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,6 +121,41 @@ pub struct AddStepPayload {
     pub title: String,
     #[allow(dead_code)]
     pub after_step_title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewOccurrence {
+    pub id: String,
+    pub roadmap_id: String,
+    pub roadmap_name: String,
+    pub step_id: String,
+    pub step_title: String,
+    pub interval_days: i64,
+    pub due_date: String,
+    pub status: String,
+    pub checklist: Vec<String>,
+    pub checklist_state: Vec<bool>,
+    pub focus_seconds: i64,
+    pub timer_remaining: i64,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateStepProgressPayload {
+    pub step_id: String,
+    pub status: String,
+    pub checklist_state: Vec<bool>,
+    pub focus_seconds: i64,
+    pub timer_remaining: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateReviewProgressPayload {
+    pub review_id: String,
+    pub status: String,
+    pub checklist_state: Vec<bool>,
+    pub focus_seconds: i64,
+    pub timer_remaining: i64,
 }
 
 // ── Notes ──────────────────────────────────────────────

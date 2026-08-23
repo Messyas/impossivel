@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { safeInvoke, isTauri } from '@/lib/ipc'
-import { Task, Roadmap, Note, initialTasks, roadmaps as seedRoadmaps, initialNotes } from '@/lib/study-data'
+import { Task, Roadmap, Note, ReviewOccurrence, initialTasks, roadmaps as seedRoadmaps, initialNotes } from '@/lib/study-data'
 
 // Backend Rust struct models for conversion
 interface BackendTask {
@@ -20,9 +20,15 @@ interface BackendRoadmapStep {
   id: string
   roadmap_id: string
   title: string
-  status: 'done' | 'active' | 'locked'
+  status: 'done' | 'available' | 'active' | 'in_progress' | 'incomplete' | 'locked'
   mastery: number
   sort_order: number
+  description: string
+  checklist: string[]
+  checklist_state: boolean[]
+  focus_seconds: number
+  timer_remaining: number
+  completed_at?: string
 }
 
 interface BackendRoadmap {
@@ -45,7 +51,24 @@ interface BackendRoadmapWithSteps {
   streak: number
   next_step?: string
   created_at: string
+  review_intervals: number[]
   steps: BackendRoadmapStep[]
+}
+
+interface BackendReviewOccurrence {
+  id: string
+  roadmap_id: string
+  roadmap_name: string
+  step_id: string
+  step_title: string
+  interval_days: number
+  due_date: string
+  status: ReviewOccurrence['status']
+  checklist: string[]
+  checklist_state: boolean[]
+  focus_seconds: number
+  timer_remaining: number
+  completed_at?: string
 }
 
 interface BackendNote {
@@ -265,11 +288,18 @@ export function useRoadmaps() {
           hours: r.hours,
           streak: r.streak,
           next: r.next_step || 'Não iniciado',
+          reviewIntervals: r.review_intervals,
           steps: r.steps.map(s => ({
             _dbId: s.id,
             title: s.title,
-            status: s.status,
+            status: s.status === 'active' ? 'available' : s.status,
             mastery: s.mastery,
+            description: s.description,
+            checklist: s.checklist,
+            checklistState: s.checklist_state,
+            focusSeconds: s.focus_seconds,
+            timerRemaining: s.timer_remaining,
+            completedAt: s.completed_at,
           })),
         } as unknown as Roadmap))
         setRoadmapsList(mapped)
@@ -300,11 +330,18 @@ export function useRoadmaps() {
           hours: r.hours,
           streak: r.streak,
           next: r.next_step || 'Não iniciado',
+          reviewIntervals: r.review_intervals,
           steps: r.steps.map(s => ({
             _dbId: s.id,
             title: s.title,
-            status: s.status,
+            status: s.status === 'active' ? 'available' : s.status,
             mastery: s.mastery,
+            description: s.description,
+            checklist: s.checklist,
+            checklistState: s.checklist_state,
+            focusSeconds: s.focus_seconds,
+            timerRemaining: s.timer_remaining,
+            completedAt: s.completed_at,
           })),
         } as unknown as Roadmap))
         setRoadmapsList(prev => {
@@ -326,9 +363,14 @@ export function useRoadmaps() {
     reloadRoadmaps()
   }, [reloadRoadmaps])
 
-  const createRoadmap = async (payload: { name: string; code?: string; steps: { title: string }[] }) => {
+  const createRoadmap = async (payload: { name: string; code?: string; reviewIntervals?: number[]; steps: Roadmap['steps'] }) => {
     if (isTauri()) {
-      await safeInvoke('create_roadmap', { payload }).catch(console.error)
+      await safeInvoke('create_roadmap', { payload: {
+        name: payload.name,
+        code: payload.code,
+        review_intervals: payload.reviewIntervals ?? [0, 1, 3, 7],
+        steps: payload.steps.map(step => ({ title: step.title, status: step.status, description: step.description, checklist: step.checklist, checklist_state: step.checklistState, focus_seconds: step.focusSeconds, timer_remaining: step.timerRemaining, completed_at: step.completedAt })),
+      } }).catch(console.error)
       await reloadRoadmaps()
     } else {
       const newRoadmap: Roadmap = {
@@ -338,10 +380,10 @@ export function useRoadmaps() {
         hours: 0,
         streak: 0,
         next: payload.steps[0]?.title || 'Primeira etapa',
+        reviewIntervals: payload.reviewIntervals ?? [0, 1, 3, 7],
         steps: payload.steps.map((s, idx) => ({
-          title: s.title,
-          status: idx === 0 ? 'active' : 'locked',
-          mastery: 0,
+          ...s,
+          status: idx === 0 ? 'available' : 'locked',
         })),
       }
       setRoadmapsList(prev => [...prev, newRoadmap])
@@ -364,11 +406,26 @@ export function useRoadmaps() {
           id: dbId,
           name: roadmap.name,
           code: roadmap.code,
-          steps: roadmap.steps.map(step => ({ title: step.title, status: step.status, mastery: step.mastery })),
+          review_intervals: roadmap.reviewIntervals ?? [0, 1, 3, 7],
+          steps: roadmap.steps.map(step => ({ id: step._dbId, title: step.title, status: step.status, description: step.description, checklist: step.checklist, checklist_state: step.checklistState, focus_seconds: step.focusSeconds, timer_remaining: step.timerRemaining, completed_at: step.completedAt })),
         },
       }).catch(console.error)
       await reloadRoadmaps()
     }
+  }
+
+  const updateStepProgress = async (step: Roadmap['steps'][number], patch: { status: Roadmap['steps'][number]['status']; checklistState: boolean[]; focusSeconds: number; timerRemaining: number }) => {
+    const stepId = step._dbId
+    if (isTauri() && stepId) {
+      await safeInvoke('update_step_progress', { payload: { step_id: stepId, status: patch.status, checklist_state: patch.checklistState, focus_seconds: patch.focusSeconds, timer_remaining: patch.timerRemaining } }).catch(console.error)
+      await reloadRoadmaps()
+      window.dispatchEvent(new Event('reviews:changed'))
+      return
+    }
+    setRoadmapsList(prev => prev.map(roadmap => ({
+      ...roadmap,
+      steps: roadmap.steps.map(item => item === step ? { ...item, ...patch } : item),
+    })))
   }
 
   const deleteRoadmap = async (roadmap: Roadmap & { _dbId?: string }) => {
@@ -387,7 +444,42 @@ export function useRoadmaps() {
     }
   }
 
-  return { roadmaps: roadmapsList, setRoadmapsList, loading, loadingMore, page, totalCount, totalPages, hasMore, fetchNextPage, createRoadmap, updateRoadmap, addStep, deleteRoadmap, clearAllRoadmaps, reloadRoadmaps }
+  return { roadmaps: roadmapsList, setRoadmapsList, loading, loadingMore, page, totalCount, totalPages, hasMore, fetchNextPage, createRoadmap, updateRoadmap, updateStepProgress, addStep, deleteRoadmap, clearAllRoadmaps, reloadRoadmaps }
+}
+
+export function useReviews() {
+  const [reviews, setReviews] = useState<ReviewOccurrence[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const reloadReviews = useCallback(async () => {
+    if (!isTauri()) { setLoading(false); return }
+    const result = await safeInvoke<BackendReviewOccurrence[]>('get_review_occurrences', {}, [])
+    setReviews(result.map(review => ({
+      id: review.id, roadmapId: review.roadmap_id, roadmapName: review.roadmap_name,
+      stepId: review.step_id, stepTitle: review.step_title, intervalDays: review.interval_days,
+      dueDate: review.due_date, status: review.status, checklist: review.checklist,
+      checklistState: review.checklist_state, focusSeconds: review.focus_seconds,
+      timerRemaining: review.timer_remaining, completedAt: review.completed_at,
+    })))
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    reloadReviews()
+    const refresh = () => { void reloadReviews() }
+    window.addEventListener('reviews:changed', refresh)
+    return () => window.removeEventListener('reviews:changed', refresh)
+  }, [reloadReviews])
+
+  const updateReviewProgress = async (review: ReviewOccurrence, patch: Pick<ReviewOccurrence, 'status' | 'checklistState' | 'focusSeconds' | 'timerRemaining'>) => {
+    setReviews(prev => prev.map(item => item.id === review.id ? { ...item, ...patch } : item))
+    if (isTauri()) {
+      await safeInvoke('update_review_progress', { payload: { review_id: review.id, status: patch.status, checklist_state: patch.checklistState, focus_seconds: patch.focusSeconds, timer_remaining: patch.timerRemaining } }).catch(console.error)
+      await reloadReviews()
+    }
+  }
+
+  return { reviews, loading, reloadReviews, updateReviewProgress }
 }
 
 // ── Notes Hook ─────────────────────────────────────────────────────────────

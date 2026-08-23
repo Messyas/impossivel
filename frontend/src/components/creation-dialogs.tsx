@@ -11,7 +11,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
 const SelectField = ({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) => (
   <Field>
@@ -108,8 +107,8 @@ export function TaskCreateDialog({ onCreate, trigger }: { onCreate: (task: Task)
   )
 }
 
-type StepDraft = { title: string; description: string; checklist: string[]; hours: string; difficulty: string }
-const newStep = (title = 'Nova Etapa'): StepDraft => ({ title, description: '', checklist: ['Compreender os conceitos fundamentais'], hours: '4h', difficulty: 'Média' })
+type StepDraft = { _dbId?: string; title: string; description: string; checklist: string[]; checklistState: boolean[]; status?: Roadmap['steps'][number]['status']; focusSeconds?: number; timerRemaining?: number; completedAt?: string }
+const newStep = (title = 'Nova Etapa'): StepDraft => ({ title, description: '', checklist: ['Compreender os conceitos fundamentais'], checklistState: [false] })
 
 function StepEditor({ step, onChange }: { step: StepDraft; onChange: (s: StepDraft) => void }) {
   const [item, setItem] = useState('')
@@ -122,21 +121,17 @@ function StepEditor({ step, onChange }: { step: StepDraft; onChange: (s: StepDra
         {step.checklist.map((x, i) => (
           <div key={`${x}-${i}`} className="flex items-center gap-2">
             <Input value={x} onChange={e => onChange({...step, checklist: step.checklist.map((v, j) => j === i ? e.target.value : v)})} />
-            <Button size="icon" variant="ghost" aria-label="Remover item da checklist" onClick={() => onChange({...step, checklist: step.checklist.filter((_, j) => j !== i)})}>
+            <Button size="icon" variant="ghost" aria-label="Remover item da checklist" onClick={() => onChange({...step, checklist: step.checklist.filter((_, j) => j !== i), checklistState: step.checklistState.filter((_, j) => j !== i)})}>
               <Trash2 className="size-4 text-destructive" />
             </Button>
           </div>
         ))}
         <div className="flex gap-2">
           <Input value={item} onChange={e => setItem(e.target.value)} placeholder="Adicionar item na checklist" />
-          <Button variant="outline" onClick={() => { if (item.trim()) { onChange({...step, checklist: [...step.checklist, item.trim()]}); setItem('') } }}>
+          <Button variant="outline" onClick={() => { if (item.trim()) { onChange({...step, checklist: [...step.checklist, item.trim()], checklistState: [...step.checklistState, false]}); setItem('') } }}>
             <Plus data-icon="inline-start" />Adicionar
           </Button>
         </div>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field><FieldLabel>Tempo estimado de estudo</FieldLabel><Input value={step.hours} onChange={e => onChange({...step, hours: e.target.value})} /></Field>
-        <SelectField label="Dificuldade inicial" value={step.difficulty} onChange={difficulty => onChange({...step, difficulty})} options={['Fácil', 'Média', 'Difícil']} />
       </div>
     </div>
   )
@@ -150,17 +145,15 @@ function RoadmapEditorDialog({ roadmap, onSubmit, trigger }: { roadmap?: Roadmap
   const [weekly, setWeekly] = useState('5h / semana')
   const [status, setStatus] = useState('Ativo')
   const [steps, setSteps] = useState<StepDraft[]>([])
-  const [strategy, setStrategy] = useState('Intervalos fixos')
   const [intervals, setIntervals] = useState(['0', '1', '3', '7', '30', '90'])
-  const [days, setDays] = useState(['Seg', 'Qua', 'Sex'])
-  const [session, setSession] = useState('50 min')
 
   useEffect(() => {
     if (!open) return
     setName(roadmap?.name ?? '')
     setDescription('')
     setGoal('')
-    setSteps(roadmap?.steps.length ? roadmap.steps.map(step => newStep(step.title)) : [newStep('Primeira etapa')])
+    setSteps(roadmap?.steps.length ? roadmap.steps.map(step => ({ _dbId: step._dbId, title: step.title, description: step.description ?? '', checklist: step.checklist ?? ['Compreender os conceitos fundamentais'], checklistState: step.checklistState ?? (step.checklist ?? ['']).map(() => false), status: step.status, focusSeconds: step.focusSeconds, timerRemaining: step.timerRemaining, completedAt: step.completedAt })) : [newStep('Primeira etapa')])
+    setIntervals((roadmap?.reviewIntervals ?? [0, 1, 3, 7]).map(String))
   }, [open, roadmap])
 
   const updateStep = (i: number, step: StepDraft) => setSteps(v => v.map((s, j) => j === i ? step : s))
@@ -177,10 +170,18 @@ function RoadmapEditorDialog({ roadmap, onSubmit, trigger }: { roadmap?: Roadmap
       ...(roadmap ?? { code: `MAP${String(Date.now()).slice(-3)}`, progress: 0, hours: 0, streak: 0 }),
       name: name.trim(),
       next: steps[0]?.title ?? 'Primeira etapa',
+      reviewIntervals: intervals.map(Number).filter(value => Number.isFinite(value) && value >= 0).sort((a, b) => a - b),
       steps: steps.map((s, i) => ({
+        _dbId: s._dbId,
         title: s.title || `Etapa ${i + 1}`,
-        status: roadmap?.steps[i]?.status ?? (i === 0 ? 'active' : 'locked'),
+        status: s.status ?? (i === 0 ? 'available' : 'locked'),
         mastery: roadmap?.steps[i]?.mastery ?? 0,
+        description: s.description,
+        checklist: s.checklist,
+        checklistState: s.checklistState.length === s.checklist.length ? s.checklistState : s.checklist.map(() => false),
+        focusSeconds: s.focusSeconds ?? 0,
+        timerRemaining: s.timerRemaining ?? 1500,
+        completedAt: s.completedAt,
       })),
     })
     setOpen(false)
@@ -249,10 +250,9 @@ function RoadmapEditorDialog({ roadmap, onSubmit, trigger }: { roadmap?: Roadmap
                 <p className="text-sm text-muted-foreground">Escolha como o conteúdo será retomado ao longo do tempo.</p>
               </div>
               <FieldGroup>
-                <SelectField label="Estratégia de revisão" value={strategy} onChange={setStrategy} options={['Intervalos fixos', 'Repetição espaçada adaptativa', 'Revisão conceitual', 'Manutenção semestral']} />
-                {strategy === 'Intervalos fixos' && (
                   <div className="flex flex-col gap-3">
                     <span className="text-sm font-medium">Intervalos em dias</span>
+                    <p className="text-sm text-muted-foreground">Os intervalos são aplicados individualmente a cada etapa, a partir do dia em que ela for concluída.</p>
                     <div className="flex flex-wrap items-center gap-2">
                       {intervals.map((x, i) => (
                         <div key={i} className="flex items-center rounded-md border">
@@ -268,31 +268,6 @@ function RoadmapEditorDialog({ roadmap, onSubmit, trigger }: { roadmap?: Roadmap
                       <Plus data-icon="inline-start" />Adicionar intervalo
                     </Button>
                   </div>
-                )}
-                <label className="flex items-center gap-3 text-sm">
-                  <Checkbox defaultChecked />Aplicar esta estratégia a todas as etapas do roadmap
-                </label>
-              </FieldGroup>
-            </section>
-
-            <Separator />
-
-            <section className="flex flex-col gap-4" aria-labelledby="roadmap-schedule-heading">
-              <div>
-                <h3 id="roadmap-schedule-heading" className="text-base font-semibold">Cronograma</h3>
-                <p className="text-sm text-muted-foreground">Configure os dias e a duração das sessões.</p>
-              </div>
-              <FieldGroup>
-                <Field>
-                  <FieldLabel>Dias preferenciais de estudo</FieldLabel>
-                  <ToggleGroup multiple value={days} onValueChange={setDays}>
-                    {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(d => (
-                      <ToggleGroupItem key={d} value={d}>{d}</ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                </Field>
-                <SelectField label="Duração típica de cada sessão" value={session} onChange={setSession} options={['25 min', '50 min', '90 min', 'Personalizado']} />
-                <Field><FieldLabel>Horário preferencial</FieldLabel><Input type="time" className="max-w-48" /></Field>
               </FieldGroup>
             </section>
           </div>
