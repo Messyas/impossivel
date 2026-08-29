@@ -48,11 +48,48 @@ const SelectField = ({ label, value, onChange, options }: { label: string; value
   </Field>
 )
 
-const StatusBadge = ({ children }: { children: React.ReactNode }) => (
-  <Badge variant="outline" className="font-normal text-muted-foreground">
-    {children}
-  </Badge>
-)
+const getStatusStyles = (status: string) => {
+  const s = status.toLowerCase()
+  if (s === 'active' || s === 'ativa' || s === 'in use' || s === 'em uso') {
+    return {
+      className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+      dot: 'bg-emerald-500',
+    }
+  }
+  if (s === 'available' || s === 'main' || s === 'disponível') {
+    return {
+      className: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+      dot: 'bg-blue-500',
+    }
+  }
+  if (s === 'backup' || s === 'trial' || s === 'resets soon' || s === 'custom' || s === 'hobby') {
+    return {
+      className: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+      dot: 'bg-amber-500',
+    }
+  }
+  if (s === 'exhausted' || s === 'disabled' || s === 'esgotada' || s === 'inativa' || s === 'inactive') {
+    return {
+      className: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+      dot: 'bg-rose-500',
+    }
+  }
+  return {
+    className: 'border-border bg-muted/60 text-muted-foreground',
+    dot: 'bg-muted-foreground',
+  }
+}
+
+const StatusBadge = ({ children }: { children: React.ReactNode }) => {
+  const str = typeof children === 'string' ? children : ''
+  const styles = getStatusStyles(str)
+  return (
+    <Badge variant="outline" className={`inline-flex items-center gap-1.5 font-normal ${styles.className}`}>
+      <span className={`size-1.5 rounded-full ${styles.dot}`} aria-hidden="true" />
+      {children}
+    </Badge>
+  )
+}
 
 export function CredentialCreateDialog({
   onSave,
@@ -658,12 +695,12 @@ export function AccountsView() {
 
   return (
     <>
-      <div className="mb-8 flex items-end justify-between gap-6">
+      <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end sm:gap-6">
         <div className="flex flex-col gap-2">
           <span className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">{t('accounts.eyebrow')}</span>
           <h1 className="text-3xl font-semibold tracking-tight">{t('accounts.title')}</h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <strong className="font-mono text-sm font-semibold text-foreground">{totalCount}</strong>
             <span>{t('accounts.accountsCount')}</span>
@@ -689,61 +726,63 @@ export function AccountsView() {
           </div>
         </div>
       </div>
-      <div className="mb-4 flex items-center gap-3">
-        <div className="relative min-w-64 flex-1">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-48 flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search accounts..." className="pl-9" />
         </div>
-        {[
-          [service, setService, ['All', ...services]],
-          [status, setStatus, ['All', ...statuses]],
-          [tier, setTier, ['All', ...freeTiers]],
-          [purpose, setPurpose, ['All', ...purposes]],
-        ].map(([value, setValue, options], i) => (
-          <Select key={i} value={value as string} onValueChange={(v) => v && (setValue as (x: string) => void)(v)}>
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {(options as string[]).map((x) => (
-                  <SelectItem key={x} value={x}>
-                    {i === 0 && x === 'All'
-                      ? 'Service: All'
-                      : i === 1 && x === 'All'
-                        ? 'Status: All'
-                        : i === 2 && x === 'All'
-                          ? 'Free Tier: All'
-                          : i === 3 && x === 'All'
-                            ? 'Purpose: All'
-                            : x}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        ))}
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            [service, setService, ['All', ...services]],
+            [status, setStatus, ['All', ...statuses]],
+            [tier, setTier, ['All', ...freeTiers]],
+            [purpose, setPurpose, ['All', ...purposes]],
+          ].map(([value, setValue, options], i) => (
+            <Select key={i} value={value as string} onValueChange={(v) => v && (setValue as (x: string) => void)(v)}>
+              <SelectTrigger className="w-32 sm:w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {(options as string[]).map((x) => (
+                    <SelectItem key={x} value={x}>
+                      {i === 0 && x === 'All'
+                        ? 'Service: All'
+                        : i === 1 && x === 'All'
+                          ? 'Status: All'
+                          : i === 2 && x === 'All'
+                            ? 'Free Tier: All'
+                            : i === 3 && x === 'All'
+                              ? 'Purpose: All'
+                              : x}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          ))}
+        </div>
       </div>
-      <div className="mb-5 flex items-center justify-between">
-        <ToggleGroup value={[quick]} onValueChange={(v) => setQuick(v[0] ?? 'All')}>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <ToggleGroup value={[quick]} onValueChange={(v) => setQuick(v[0] ?? 'All')} className="flex-wrap">
           {['All', 'In use', 'Available', 'Exhausted', 'Backup'].map((x) => (
             <ToggleGroupItem key={x} value={x}>
               {x}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <div className="flex items-center gap-5">
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-5">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
             <Switch checked={exclusive} onCheckedChange={setExclusive} />
             One in use per service
           </label>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
             <Switch checked={group} onCheckedChange={setGroup} />
             Group by service
           </label>
         </div>
       </div>
-      <div className="overflow-hidden rounded-xl border">
+      <div className="overflow-x-auto rounded-xl border">
         {groups.map(([name, items]) => (
           <div key={name}>
             {name && <div className="border-b bg-muted/30 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{name}</div>}

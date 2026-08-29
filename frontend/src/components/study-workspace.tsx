@@ -48,13 +48,13 @@ export function StudyWorkspace() {
   const startFocus = (title: string, minutes = 25) => { setFocus(title); setSeconds(minutes * 60); setRunning(true) }
 
   return <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
-    <header data-tauri-drag-region className="sticky top-0 z-40 border-b bg-background select-none">
-      <div data-tauri-drag-region className="flex h-16 w-full items-center gap-6 pl-6 lg:pl-8">
+    <header data-tauri-drag-region className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur-sm select-none">
+      <div data-tauri-drag-region className="flex h-16 w-full items-center gap-2 sm:gap-4 lg:gap-6 px-3 sm:px-6 lg:px-8">
         <div data-tauri-drag-region className="flex h-full shrink-0 items-center" aria-label="Study OS">
-          <img src={`${import.meta.env.BASE_URL}logo-light-mode.svg`} alt="Study OS" className="size-[3.85rem] scale-[1.15] object-contain dark:hidden" />
-          <img src={`${import.meta.env.BASE_URL}logo-dark-mode.svg`} alt="" className="hidden size-[3.85rem] scale-[1.15] object-contain dark:block" />
+          <img src={`${import.meta.env.BASE_URL}logo-light-mode.svg`} alt="Study OS" className="size-10 sm:size-[3.85rem] sm:scale-[1.15] object-contain dark:hidden" />
+          <img src={`${import.meta.env.BASE_URL}logo-dark-mode.svg`} alt="" className="hidden size-10 sm:size-[3.85rem] sm:scale-[1.15] object-contain dark:block" />
         </div>
-        <nav data-tauri-drag-region aria-label="Navegação principal" className="flex h-full flex-1 items-center gap-1">
+        <nav data-tauri-drag-region aria-label="Navegação principal" className="flex h-full flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {nav.map(item => (
             <button
               key={item.id}
@@ -62,22 +62,22 @@ export function StudyWorkspace() {
               type="button"
               aria-current={view === item.id ? 'page' : undefined}
               onClick={() => setView(item.id)}
-              className={`nav-button flex h-full items-center gap-2 border-b-2 px-3 text-sm transition-colors ${
-                view === item.id ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+              className={`nav-button flex h-full shrink-0 items-center gap-1.5 sm:gap-2 border-b-2 px-2 sm:px-3 text-xs sm:text-sm whitespace-nowrap transition-colors ${
+                view === item.id ? 'border-primary text-foreground font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               <AnimatedIcon><item.icon /></AnimatedIcon>
-              {t(item.labelKey)}
+              <span>{t(item.labelKey)}</span>
             </button>
           ))}
         </nav>
         <Dialog>
-          <DialogTrigger render={<Button variant="outline" className="h-10 min-w-52 justify-between font-mono" />}>
-            <span className="flex items-center gap-2">
+          <DialogTrigger render={<Button variant="outline" size="sm" className="h-9 sm:h-10 min-w-28 sm:min-w-44 max-w-56 shrink-0 justify-between font-mono px-2 sm:px-3" />}>
+            <span className="flex items-center gap-1.5 sm:gap-2">
               <span className={`size-2 rounded-full ${running ? 'bg-primary animate-pulse' : 'bg-muted-foreground'}`} />
               {formatTime(seconds)}
             </span>
-            <span className="max-w-28 truncate text-xs text-muted-foreground">{focus}</span>
+            <span className="hidden xl:inline max-w-28 truncate text-xs text-muted-foreground">{focus}</span>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -118,18 +118,18 @@ export function StudyWorkspace() {
           type="button"
           aria-label={`Abrir perfil de ${preferences.name}`}
           onClick={() => setView('settings')}
-          className="flex items-center gap-2.5 rounded-full px-2.5 py-1 text-left transition-colors hover:bg-accent/60 outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+          className="flex shrink-0 items-center gap-2 rounded-full p-1 sm:px-2.5 sm:py-1 text-left transition-colors hover:bg-accent/60 outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
         >
-          <span className="text-sm font-medium text-foreground max-w-36 truncate">{preferences.name}</span>
-          <Avatar className="size-[36px]">
+          <span className="hidden md:inline text-xs sm:text-sm font-medium text-foreground max-w-28 lg:max-w-36 truncate">{preferences.name}</span>
+          <Avatar className="size-8 sm:size-[34px]">
             <AvatarImage src={preferences.avatar || undefined} alt={`Foto de ${preferences.name}`} />
-            <AvatarFallback>{initials}</AvatarFallback>
+            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
           </Avatar>
         </button>
         <WindowControls />
       </div>
     </header>
-    <div className="w-full min-w-0 px-6 py-6 lg:px-8">
+    <div className="w-full min-w-0 px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       <ViewPanel id="todo" activeView={view}><TodoView onFocus={startFocus} activeFocus={{ title: focus, seconds, running, toggleRunning: () => setRunning(v => !v) }} /></ViewPanel>
       <ViewPanel id="roadmaps" activeView={view}><RoadmapsView onFocus={startFocus} /></ViewPanel>
       <ViewPanel id="calendar" activeView={view}><CalendarView onFocus={startFocus} /></ViewPanel>

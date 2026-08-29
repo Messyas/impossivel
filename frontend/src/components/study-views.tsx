@@ -106,6 +106,31 @@ export function TodoView({
   </>
 }
 
+function PriorityBadge({ priority }: { priority: Task['priority'] }) {
+  if (priority === 'Alta') {
+    return (
+      <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 font-normal">
+        <span className="mr-1 size-1.5 rounded-full bg-rose-500" aria-hidden="true" />
+        Alta
+      </Badge>
+    )
+  }
+  if (priority === 'Média') {
+    return (
+      <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 font-normal">
+        <span className="mr-1 size-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+        Média
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="border-border bg-muted/60 text-muted-foreground font-normal">
+      <span className="mr-1 size-1.5 rounded-full bg-muted-foreground" aria-hidden="true" />
+      Baixa
+    </Badge>
+  )
+}
+
 function TaskRow({
   task,
   isFocused,
@@ -188,8 +213,8 @@ function TaskRow({
           </Button>
         )}
       </div>
-      <div className="flex w-16 shrink-0 justify-end">
-        <Badge variant={task.priority === 'Alta' ? 'default' : 'secondary'}>{task.priority}</Badge>
+      <div className="flex w-20 shrink-0 justify-end">
+        <PriorityBadge priority={task.priority} />
       </div>
       <div className="flex shrink-0 items-center justify-center">
         <Button
@@ -291,19 +316,296 @@ function RoadmapExecutionCard({ roadmap: r, onDelete, onEdit, onStepSave }: {
   )
 }
 
-function RoadmapCard({ roadmap: r, onFocus, onDelete, onEdit }: { roadmap: Roadmap; onFocus:(t:string,m?:number)=>void; onDelete: () => void; onEdit: (roadmap: Roadmap) => void }) {
+function RoadmapCard({
+  roadmap: r,
+  onFocus,
+  onDelete,
+  onEdit,
+}: {
+  roadmap: Roadmap
+  onFocus: (t: string, m?: number) => void
+  onDelete: () => void
+  onEdit: (roadmap: Roadmap) => void
+}) {
   const [step, setStep] = useState<Roadmap['steps'][number] | null>(null)
   const { t } = useTranslation()
-  const completedSteps = r.steps.filter(step => step.status === 'done').length
+  const completedSteps = r.steps.filter((step) => step.status === 'done').length
   const pendingSteps = r.steps.length - completedSteps
-  return <Card className="min-w-0 overflow-hidden"><CardHeader><div className="flex items-start justify-between gap-4"><div className="min-w-0"><CardDescription className="truncate">{t('roadmaps.nextStage')}: {r.next}</CardDescription></div><Button size="icon" variant="ghost" onClick={onDelete} className="size-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors" aria-label={`Excluir roadmap ${r.name}`}><Trash2 className="size-4" /></Button></div><Dialog><DialogTrigger render={<button type="button" className="text-left" />}><CardTitle className="break-words text-xl hover:underline">{r.name}</CardTitle></DialogTrigger><RoadmapDialog roadmap={r} onFocus={onFocus} onDelete={onDelete} /></Dialog></CardHeader><CardContent className="flex min-w-0 flex-col gap-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(10rem,0.5fr)_minmax(10rem,0.5fr)] xl:gap-x-10"><div><div className="mb-2 flex justify-between text-xs"><span className="text-muted-foreground">{t('roadmaps.overallProgress')}</span><span className="font-mono">{r.progress}%</span></div><Progress value={r.progress} /></div><Metric label={t('roadmaps.timeInvested')} value={`${r.hours}h`} /><Metric label="Etapas concluídas" value={`${completedSteps} de ${r.steps.length}`} /></div><div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 text-xs text-muted-foreground"><span>{t('roadmaps.nextStage')}: <strong className="font-medium text-foreground">{r.next}</strong></span><span>Etapas pendentes: <strong className="font-mono font-medium text-foreground">{pendingSteps}</strong></span></div><div className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-3"><div className="flex w-max min-w-max items-stretch gap-0 pr-4">{r.steps.map((s,i) => <div key={s.title} className="flex items-center"><button onClick={() => setStep(s)} className={`flex w-56 shrink-0 flex-col gap-3 rounded-lg border p-3 text-left transition-colors hover:border-primary/50 hover:bg-accent ${s.status === 'active' ? 'border-primary bg-accent' : ''}`}><div className="flex w-full items-center justify-between"><span className="font-mono text-[11px] text-muted-foreground">{t('roadmaps.stage')} {String(i+1).padStart(2,'0')}</span>{s.status === 'done' ? <Check className="size-4" /> : s.status === 'active' ? <Circle className="size-4 fill-current" /> : <Circle className="size-4 text-muted-foreground" />}</div><div><div className="truncate text-sm font-medium">{s.title}</div><div className="mt-1 text-xs text-muted-foreground">{s.status === 'done' ? t('roadmaps.done') : s.status === 'active' ? t('roadmaps.inProgress') : t('roadmaps.locked')}</div></div><Progress value={s.status === 'done' ? 100 : 0} /></button>{i < r.steps.length - 1 && <span aria-hidden="true" className="h-px w-6 shrink-0 bg-border" />}</div>)}</div></div><div className="flex justify-end"><RoadmapEditDialog roadmap={r} onSave={onEdit} /></div></CardContent>{step && <Dialog open onOpenChange={open => !open && setStep(null)}><DialogContent><DialogHeader><DialogTitle>{step.title}</DialogTitle><DialogDescription>{r.name} · {t('roadmaps.stage')}</DialogDescription></DialogHeader><div className="grid grid-cols-3 gap-3"><Metric label="Status" value={step.status === 'done' ? 'Concluída' : step.status === 'active' ? 'Em andamento' : 'Bloqueada'} /><Metric label="Dificuldade" value="Média" /><Metric label="Confiança" value="Alta" /></div><Progress value={step.status === 'done' ? 100 : 0} /><div className="flex flex-col gap-3">{['Ler material-base','Resolver exercícios guiados','Completar revisão ativa'].map((x,i)=><label key={x} className="flex items-center gap-3 rounded-md border p-3 text-sm"><Checkbox defaultChecked={i===0} />{x}</label>)}</div><Textarea defaultValue="Anotar dúvidas, padrões e conexões desta etapa..." /><Button onClick={() => onFocus(step.title,50)}><Play data-icon="inline-start" />{t('roadmaps.startFocusSession')}</Button></DialogContent></Dialog>}</Card>
+
+  return (
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <CardDescription className="truncate">{t('roadmaps.nextStage')}: {r.next}</CardDescription>
+          </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={onDelete}
+            className="size-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            aria-label={`Excluir roadmap ${r.name}`}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+        <Dialog>
+          <DialogTrigger render={<button type="button" className="text-left" />}>
+            <CardTitle className="break-words text-xl hover:underline">{r.name}</CardTitle>
+          </DialogTrigger>
+          <RoadmapDialog roadmap={r} onFocus={onFocus} onDelete={onDelete} />
+        </Dialog>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(10rem,0.5fr)_minmax(10rem,0.5fr)] xl:gap-x-10">
+          <div>
+            <div className="mb-2 flex justify-between text-xs">
+              <span className="text-muted-foreground">{t('roadmaps.overallProgress')}</span>
+              <span className="font-mono">{r.progress}%</span>
+            </div>
+            <Progress value={r.progress} />
+          </div>
+          <Metric label={t('roadmaps.timeInvested')} value={`${r.hours}h`} />
+          <Metric label="Etapas concluídas" value={`${completedSteps} de ${r.steps.length}`} />
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 text-xs text-muted-foreground">
+          <span>{t('roadmaps.nextStage')}: <strong className="font-medium text-foreground">{r.next}</strong></span>
+          <span>Etapas pendentes: <strong className="font-mono font-medium text-foreground">{pendingSteps}</strong></span>
+        </div>
+        <div className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-3">
+          <div className="flex w-max min-w-max items-stretch gap-0 pr-4">
+            {r.steps.map((s, i) => (
+              <div key={s.title} className="flex items-center">
+                <button
+                  onClick={() => setStep(s)}
+                  className={`flex w-56 shrink-0 flex-col gap-3 rounded-lg border p-3 text-left transition-colors hover:border-primary/50 hover:bg-accent ${
+                    s.status === 'active' ? 'border-primary bg-accent' : ''
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span className="font-mono text-[11px] text-muted-foreground">{t('roadmaps.stage')} {String(i + 1).padStart(2, '0')}</span>
+                    {s.status === 'done' ? <Check className="size-4 text-emerald-600 dark:text-emerald-400" /> : s.status === 'active' ? <Circle className="size-4 fill-current text-primary" /> : <Circle className="size-4 text-muted-foreground" />}
+                  </div>
+                  <div>
+                    <div className="truncate text-sm font-medium">{s.title}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{s.status === 'done' ? t('roadmaps.done') : s.status === 'active' ? t('roadmaps.inProgress') : t('roadmaps.locked')}</div>
+                  </div>
+                  <Progress value={s.status === 'done' ? 100 : 0} />
+                </button>
+                {i < r.steps.length - 1 && <span aria-hidden="true" className="h-px w-6 shrink-0 bg-border" />}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <RoadmapEditDialog roadmap={r} onSave={onEdit} />
+        </div>
+      </CardContent>
+      {step && (
+        <Dialog open onOpenChange={(open) => !open && setStep(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{step.title}</DialogTitle>
+              <DialogDescription>{r.name} · {t('roadmaps.stage')}</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-3 gap-3">
+              <Metric label="Status" value={step.status === 'done' ? 'Concluída' : step.status === 'active' ? 'Em andamento' : 'Bloqueada'} />
+              <Metric label="Dificuldade" value="Média" />
+              <Metric label="Confiança" value="Alta" />
+            </div>
+            <Progress value={step.status === 'done' ? 100 : 0} />
+            <div className="flex flex-col gap-3">
+              {['Ler material-base', 'Resolver exercícios guiados', 'Completar revisão ativa'].map((x, i) => (
+                <label key={x} className="flex items-center gap-3 rounded-md border p-3 text-sm cursor-pointer">
+                  <Checkbox defaultChecked={i === 0} />
+                  {x}
+                </label>
+              ))}
+            </div>
+            <Textarea defaultValue="Anotar dúvidas, padrões e conexões desta etapa..." />
+            <Button onClick={() => onFocus(step.title, 50)}>
+              <Play data-icon="inline-start" />
+              {t('roadmaps.startFocusSession')}
+            </Button>
+          </DialogContent>
+        </Dialog>
+      )}
+    </Card>
+  )
 }
 
-function Metric({ label, value }: {label:string;value:string}) { return <div className="flex flex-col gap-1"><span className="text-xs text-muted-foreground">{label}</span><span className="font-mono text-sm font-medium">{value}</span></div> }
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="font-mono text-sm font-medium text-foreground">{value}</span>
+    </div>
+  )
+}
 
-function RoadmapDialog({roadmap:r,onFocus,onDelete}:{roadmap:Roadmap;onFocus:(t:string,m?:number)=>void;onDelete?:()=>void}) {
+function RoadmapDialog({
+  roadmap: r,
+  onFocus,
+  onDelete,
+}: {
+  roadmap: Roadmap
+  onFocus: (t: string, m?: number) => void
+  onDelete?: () => void
+}) {
   const { t } = useTranslation()
-  const [focusMode,setFocusMode]=useState(false); const [completed,setCompleted]=useState<string[]>(r.steps.filter(s=>s.status==='done').map(s=>s.title)); const [seconds,setSeconds]=useState(25*60); const [running,setRunning]=useState(false); useEffect(()=>{if(!running||seconds<=0)return;const id=window.setInterval(()=>setSeconds(v=>v-1),1000);return()=>window.clearInterval(id)},[running,seconds]); const toggle=(title:string)=>setCompleted(v=>v.includes(title)?v.filter(x=>x!==title):[...v,title]); return <DialogContent className={focusMode?'fixed inset-0 !left-0 !top-0 z-50 flex !h-screen !w-screen !max-w-none !translate-x-0 !translate-y-0 flex-col justify-center rounded-none border-0 bg-background p-6 sm:p-12':'sm:max-w-3xl'}>{focusMode ? <><DialogHeader><DialogTitle>{t('roadmaps.focusMode')} · {r.name}</DialogTitle><DialogDescription>{t('roadmaps.checklist')}</DialogDescription></DialogHeader><div className="grid gap-6 md:grid-cols-[1fr_220px]"><Card><CardHeader><CardDescription>{t('roadmaps.checklist')}</CardDescription><CardTitle className="text-lg">{completed.length} de {r.steps.length} {t('roadmaps.completedSessions')}</CardTitle></CardHeader><CardContent className="flex flex-col gap-3">{r.steps.map(s=><label key={s.title} className="flex items-center gap-3 rounded-md border p-3"><Checkbox checked={completed.includes(s.title)} onCheckedChange={()=>toggle(s.title)} /><span className={completed.includes(s.title)?'text-muted-foreground line-through':'text-sm'}>{s.title}</span></label>)}</CardContent></Card><Card className="h-fit"><CardHeader><CardDescription>{t('roadmaps.sessionTime')}</CardDescription><CardTitle className="font-mono text-4xl">{formatFocusTime(seconds)}</CardTitle></CardHeader><CardContent className="flex flex-col gap-3"><Button onClick={()=>setRunning(v=>!v)}>{running ? t('header.pause') : t('header.start')} {t('roadmaps.focusMode')}</Button><Button variant="outline" onClick={()=>{setRunning(false);setSeconds(25*60)}}><RotateCcw data-icon="inline-start" />{t('header.reset')}</Button><div className="flex items-center justify-center gap-2"><Button variant="outline" size="icon" aria-label="Diminuir 5 minutos" onClick={()=>setSeconds(v=>Math.max(60,v-5*60))}>−</Button><span className="text-xs text-muted-foreground">ajustar 5 min</span><Button variant="outline" size="icon" aria-label="Aumentar 5 minutos" onClick={()=>setSeconds(v=>v+5*60)}>+</Button></div></CardContent></Card></div><Button variant="outline" onClick={()=>setFocusMode(false)}>{t('roadmaps.backToRoadmap')}</Button></> : <><DialogHeader className="flex flex-row items-center justify-between pr-6"><div><DialogTitle>{r.name}</DialogTitle><DialogDescription>{t('roadmaps.detailedTracking')} {r.code}.</DialogDescription></div>{onDelete && <Button size="icon" variant="ghost" onClick={onDelete} className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors" aria-label={`Excluir roadmap ${r.name}`}><Trash2 className="size-4" /></Button>}</DialogHeader><Tabs defaultValue="overview"><TabsList><TabsTrigger value="overview">{t('roadmaps.overview')}</TabsTrigger><TabsTrigger value="reviews">{t('roadmaps.reviews')}</TabsTrigger><TabsTrigger value="sessions">{t('roadmaps.sessions')}</TabsTrigger><TabsTrigger value="notes">{t('roadmaps.notes')}</TabsTrigger></TabsList><TabsContent value="overview" className="mt-5"><div className="grid gap-3 md:grid-cols-3"><Card><CardHeader><CardDescription>{t('roadmaps.overallProgress')}</CardDescription><CardTitle className="font-mono text-3xl">{r.progress}%</CardTitle></CardHeader></Card><Card><CardHeader><CardDescription>{t('roadmaps.completedSessions')}</CardDescription><CardTitle className="font-mono text-3xl">{Math.round(r.hours*1.4)}</CardTitle></CardHeader></Card><Card><CardHeader><CardDescription>{t('roadmaps.consistency')}</CardDescription><CardTitle className="font-mono text-3xl">{r.streak}d</CardTitle></CardHeader></Card></div><Button className="mt-5" onClick={()=>{setFocusMode(true);onFocus(r.next,25)}}><Play data-icon="inline-start" />{t('roadmaps.startFocusSession')}</Button></TabsContent><TabsContent value="reviews" className="mt-5"><Card><CardContent className="py-5 text-sm text-muted-foreground">2 revisões vencem esta semana. Próxima revisão em 1 dia.</CardContent></Card></TabsContent><TabsContent value="sessions" className="mt-5"><Card><CardContent className="py-5"><Button onClick={()=>onFocus(r.next,50)}><Play data-icon="inline-start" />Começar {r.next}</Button></CardContent></Card></TabsContent><TabsContent value="notes" className="mt-5"><Textarea defaultValue={`Notas gerais sobre ${r.name}...`} /></TabsContent></Tabs></>}</DialogContent>
+  const [focusMode, setFocusMode] = useState(false)
+  const [completed, setCompleted] = useState<string[]>(r.steps.filter((s) => s.status === 'done').map((s) => s.title))
+  const [seconds, setSeconds] = useState(25 * 60)
+  const [running, setRunning] = useState(false)
+
+  useEffect(() => {
+    if (!running || seconds <= 0) return
+    const id = window.setInterval(() => setSeconds((v) => v - 1), 1000)
+    return () => window.clearInterval(id)
+  }, [running, seconds])
+
+  const toggle = (title: string) =>
+    setCompleted((v) => (v.includes(title) ? v.filter((x) => x !== title) : [...v, title]))
+
+  return (
+    <DialogContent
+      className={
+        focusMode
+          ? 'fixed inset-0 !left-0 !top-0 z-50 flex !h-screen !w-screen !max-w-none !translate-x-0 !translate-y-0 flex-col justify-center rounded-none border-0 bg-background p-6 sm:p-12'
+          : 'sm:max-w-3xl'
+      }
+    >
+      {focusMode ? (
+        <>
+          <DialogHeader>
+            <DialogTitle>{t('roadmaps.focusMode')} · {r.name}</DialogTitle>
+            <DialogDescription>{t('roadmaps.checklist')}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-6 md:grid-cols-[1fr_220px]">
+            <Card>
+              <CardHeader>
+                <CardDescription>{t('roadmaps.checklist')}</CardDescription>
+                <CardTitle className="text-lg">
+                  {completed.length} de {r.steps.length} {t('roadmaps.completedSessions')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {r.steps.map((s) => (
+                  <label key={s.title} className="flex items-center gap-3 rounded-md border p-3 cursor-pointer">
+                    <Checkbox checked={completed.includes(s.title)} onCheckedChange={() => toggle(s.title)} />
+                    <span className={completed.includes(s.title) ? 'text-muted-foreground line-through' : 'text-sm'}>
+                      {s.title}
+                    </span>
+                  </label>
+                ))}
+              </CardContent>
+            </Card>
+            <Card className="h-fit">
+              <CardHeader>
+                <CardDescription>{t('roadmaps.sessionTime')}</CardDescription>
+                <CardTitle className="font-mono text-4xl">{formatFocusTime(seconds)}</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <Button onClick={() => setRunning((v) => !v)}>
+                  {running ? t('header.pause') : t('header.start')} {t('roadmaps.focusMode')}
+                </Button>
+                <Button variant="outline" onClick={() => { setRunning(false); setSeconds(25 * 60) }}>
+                  <RotateCcw data-icon="inline-start" />
+                  {t('header.reset')}
+                </Button>
+                <div className="flex items-center justify-center gap-2">
+                  <Button variant="outline" size="icon" aria-label="Diminuir 5 minutos" onClick={() => setSeconds((v) => Math.max(60, v - 5 * 60))}>
+                    −
+                  </Button>
+                  <span className="text-xs text-muted-foreground">ajustar 5 min</span>
+                  <Button variant="outline" size="icon" aria-label="Aumentar 5 minutos" onClick={() => setSeconds((v) => v + 5 * 60)}>
+                    +
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <Button variant="outline" onClick={() => setFocusMode(false)}>
+            {t('roadmaps.backToRoadmap')}
+          </Button>
+        </>
+      ) : (
+        <>
+          <DialogHeader className="flex flex-row items-center justify-between pr-6">
+            <div>
+              <DialogTitle>{r.name}</DialogTitle>
+              <DialogDescription>{t('roadmaps.detailedTracking')} {r.code}.</DialogDescription>
+            </div>
+            {onDelete && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={onDelete}
+                className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                aria-label={`Excluir roadmap ${r.name}`}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            )}
+          </DialogHeader>
+          <Tabs defaultValue="overview">
+            <TabsList>
+              <TabsTrigger value="overview">{t('roadmaps.overview')}</TabsTrigger>
+              <TabsTrigger value="reviews">{t('roadmaps.reviews')}</TabsTrigger>
+              <TabsTrigger value="sessions">{t('roadmaps.sessions')}</TabsTrigger>
+              <TabsTrigger value="notes">{t('roadmaps.notes')}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview" className="mt-5">
+              <div className="grid gap-3 md:grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <CardDescription>{t('roadmaps.overallProgress')}</CardDescription>
+                    <CardTitle className="font-mono text-3xl">{r.progress}%</CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardDescription>{t('roadmaps.completedSessions')}</CardDescription>
+                    <CardTitle className="font-mono text-3xl">{Math.round(r.hours * 1.4)}</CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardDescription>{t('roadmaps.consistency')}</CardDescription>
+                    <CardTitle className="font-mono text-3xl">{r.streak}d</CardTitle>
+                  </CardHeader>
+                </Card>
+              </div>
+              <Button className="mt-5" onClick={() => { setFocusMode(true); onFocus(r.next, 25) }}>
+                <Play data-icon="inline-start" />
+                {t('roadmaps.startFocusSession')}
+              </Button>
+            </TabsContent>
+            <TabsContent value="reviews" className="mt-5">
+              <Card>
+                <CardContent className="py-5 text-sm text-muted-foreground">
+                  2 revisões vencem esta semana. Próxima revisão em 1 dia.
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="sessions" className="mt-5">
+              <Card>
+                <CardContent className="py-5">
+                  <Button onClick={() => onFocus(r.next, 50)}>
+                    <Play data-icon="inline-start" />
+                    Começar {r.next}
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="notes" className="mt-5">
+              <Textarea defaultValue={`Notas gerais sobre ${r.name}...`} />
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
+    </DialogContent>
+  )
 }
 
 const days = ['SEG 17','TER 18','QUA 19','QUI 20','SEX 21','SÁB 22','DOM 23']

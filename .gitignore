@@ -44,3 +44,16 @@ lerna-debug.log*
 *.sw?
 .DS_Store
 Thumbs.db
+
+# AI Agents & Assistant Files
+.agent/
+.agents/
+.claude/
+.codex/
+.gemini/
+.opencode/
+.cursor/
+.windsurf/
+.cline/
+.roo/
+
