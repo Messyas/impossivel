@@ -1,17 +1,23 @@
-use tauri::State;
-use uuid::Uuid;
 use crate::crypto;
 use crate::db::Database;
-use crate::models::{Account, Credential, AccountWithCredentials, CreateAccountPayload, AddCredentialPayload, PaginatedResponse, PaginationQueryPayload};
+use crate::models::{
+    Account, AccountWithCredentials, AddCredentialPayload, CreateAccountPayload, Credential,
+    PaginatedResponse, PaginationQueryPayload,
+};
+use tauri::State;
+use uuid::Uuid;
 
 fn encode_cursor(s: &str) -> String {
     s.bytes().map(|b| format!("{:02x}", b)).collect()
 }
 
 fn decode_cursor(s: &str) -> Option<String> {
-    if s.len() % 2 != 0 { return None; }
-    let bytes: Option<Vec<u8>> = (0..s.len()).step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i+2], 16).ok())
+    if s.len() % 2 != 0 {
+        return None;
+    }
+    let bytes: Option<Vec<u8>> = (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
         .collect();
     bytes.and_then(|b| String::from_utf8(b).ok())
 }
@@ -71,7 +77,8 @@ pub fn get_accounts(
     };
 
     let mut acc_stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
-    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+    let param_refs: Vec<&dyn rusqlite::ToSql> =
+        params.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
 
     let mut raw_accounts: Vec<Account> = acc_stmt
         .query_map(&param_refs[..], |row| {
@@ -162,10 +169,14 @@ pub fn get_accounts(
 }
 
 #[tauri::command]
-pub fn create_account(db: State<'_, Database>, payload: CreateAccountPayload) -> Result<Account, String> {
+pub fn create_account(
+    db: State<'_, Database>,
+    payload: CreateAccountPayload,
+) -> Result<Account, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let id = payload.id.unwrap_or_else(|| Uuid::new_v4().to_string());
-    let tags_json = serde_json::to_string(&payload.tags.unwrap_or_default()).map_err(|e| e.to_string())?;
+    let tags_json =
+        serde_json::to_string(&payload.tags.unwrap_or_default()).map_err(|e| e.to_string())?;
 
     let purpose = payload.purpose.unwrap_or_else(|| "Development".into());
     let status = payload.status.unwrap_or_else(|| "Active".into());
@@ -268,7 +279,10 @@ pub fn toggle_account_use(db: State<'_, Database>, id: String) -> Result<(), Str
 }
 
 #[tauri::command]
-pub fn add_credential(db: State<'_, Database>, payload: AddCredentialPayload) -> Result<(), String> {
+pub fn add_credential(
+    db: State<'_, Database>,
+    payload: AddCredentialPayload,
+) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let id = Uuid::new_v4().to_string();
     let cred_type = payload.cred_type.unwrap_or_else(|| "API Key".into());

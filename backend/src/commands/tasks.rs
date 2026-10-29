@@ -1,8 +1,8 @@
+use crate::commands::analytics::update_analytics_internal;
+use crate::db::Database;
+use crate::models::{CreateTaskPayload, PaginatedResponse, PaginationQueryPayload, Task};
 use tauri::State;
 use uuid::Uuid;
-use crate::db::Database;
-use crate::models::{Task, CreateTaskPayload, PaginatedResponse, PaginationQueryPayload};
-use crate::commands::analytics::update_analytics_internal;
 
 #[tauri::command]
 pub fn get_tasks(

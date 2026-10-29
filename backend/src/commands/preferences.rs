@@ -1,6 +1,6 @@
-use tauri::State;
 use crate::db::Database;
 use crate::models::UserPreferences;
+use tauri::State;
 
 fn read_pref(conn: &rusqlite::Connection, key: &str) -> String {
     conn.query_row(
@@ -29,7 +29,10 @@ pub fn get_preferences(db: State<'_, Database>) -> Result<UserPreferences, Strin
 }
 
 #[tauri::command]
-pub fn update_preferences(db: State<'_, Database>, preferences: UserPreferences) -> Result<(), String> {
+pub fn update_preferences(
+    db: State<'_, Database>,
+    preferences: UserPreferences,
+) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let pairs = [

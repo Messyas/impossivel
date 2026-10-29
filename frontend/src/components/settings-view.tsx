@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { Check, ImagePlus, Loader2, Monitor, Moon, RotateCcw, Sun, UserRound } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Copy, ImagePlus, KeyRound, Loader2, Monitor, Moon, RotateCcw, Sun, UserRound } from 'lucide-react'
 import { useUserPreferences, type Font, type Locale, type Theme } from '@/hooks/use-user-preferences'
 import { useTranslation } from '@/lib/i18n'
 import { processAvatarImage } from '@/lib/image-processor'
@@ -8,8 +8,16 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { safeInvoke, isTauri } from '@/lib/ipc'
+import { Switch } from '@/components/ui/switch'
+
+type AgentSettings = { enabled:boolean; port:number; endpoint:string }
+type AgentTokenInfo = { client:string; created_at:string }
+type AgentHistoryItem = { client:string; operation:string; summary:string; created_at:string }
+type PendingAgentDeletion = { id:string; client:string; entity_type:string; entity_id:string; summary:string; created_at:string }
 
 const themes: { value: Theme; labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark'; descKey: 'settings.themeSystemDesc' | 'settings.themeLightDesc' | 'settings.themeDarkDesc'; icon: typeof Sun }[] = [
   { value: 'system', labelKey: 'settings.themeSystem', descKey: 'settings.themeSystemDesc', icon: Monitor },
@@ -42,6 +50,25 @@ export function SettingsView() {
   const [saved, setSaved] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [agent,setAgent]=useState<AgentSettings>({enabled:false,port:48731,endpoint:'http://127.0.0.1:48731/mcp'})
+  const [agentTokens,setAgentTokens]=useState<AgentTokenInfo[]>([])
+  const [agentHistory,setAgentHistory]=useState<AgentHistoryItem[]>([])
+  const [pendingDeletes,setPendingDeletes]=useState<PendingAgentDeletion[]>([])
+  const [portDraft,setPortDraft]=useState('48731')
+  const [newTokens,setNewTokens]=useState<Record<string,string>>({})
+  const [agentMessage,setAgentMessage]=useState('')
+  const [agentClient,setAgentClient]=useState<'codex'|'claude'|'antigravity'>('codex')
+  const [copied,setCopied]=useState(false)
+
+  const loadAgents=async()=>{if(!isTauri())return;try{const [config,tokens,history,pending]=await Promise.all([safeInvoke<AgentSettings>('get_agent_settings'),safeInvoke<AgentTokenInfo[]>('list_agent_tokens'),safeInvoke<AgentHistoryItem[]>('get_agent_history'),safeInvoke<PendingAgentDeletion[]>('get_pending_deletions')]);setAgent(config);setPortDraft(String(config.port));setAgentTokens(tokens);setAgentHistory(history);setPendingDeletes(pending)}catch(e){console.error('Falha ao carregar a integração MCP',e)}}
+  useEffect(()=>{void loadAgents()},[])
+  const configureAgent=async(enabled:boolean)=>{try{await safeInvoke('set_agent_enabled',{enabled});setAgent(v=>({...v,enabled}));setAgentMessage(enabled?'MCP local ativado. O agente precisa se reconectar.':'Integração desativada e tokens revogados.');if(!enabled){setAgentTokens([]);setNewTokens({})}}catch(e){setAgentMessage(e instanceof Error?e.message:'Não foi possível alterar a integração.')}}
+  const generateToken=async(client:string)=>{try{const token=await safeInvoke<string>('generate_agent_token',{client});setNewTokens(v=>({...v,[client]:token}));await loadAgents();setAgentClient(client as typeof agentClient);setAgentMessage(`Token do ${client} criado. Copie agora para concluir a configuração.`)}catch(e){setAgentMessage(e instanceof Error?e.message:'Não foi possível gerar o token.')}}
+  const revokeToken=async(client:string)=>{try{await safeInvoke('revoke_agent_token',{client});setNewTokens(v=>({...v,[client]:''}));await loadAgents();setAgentMessage(`Acesso do ${client} revogado.`)}catch(e){setAgentMessage(e instanceof Error?e.message:'Não foi possível revogar o token.')}}
+  const saveAgentPort=async()=>{const port=Number(portDraft);try{await safeInvoke('set_agent_port',{port});await loadAgents();setAgentMessage('Porta MCP atualizada. Reconecte o cliente.')}catch(e){setAgentMessage(e instanceof Error?e.message:'Não foi possível alterar a porta.')}}
+  const resolveDeletion=async(id:string,approve:boolean)=>{try{await safeInvoke('resolve_pending_deletion',{id,approve});await loadAgents();setAgentMessage(approve?'Exclusão confirmada.':'Solicitação de exclusão rejeitada.')}catch(e){setAgentMessage(e instanceof Error?e.message:'Não foi possível resolver a exclusão.')}}
+  const configText=()=>{const token=newTokens[agentClient];if(!token)return 'Gere um token para ver a configuração de conexão.';const headers={Authorization:`Bearer ${token}`};if(agentClient==='codex')return `[mcp_servers.study_os]\nurl = "${agent.endpoint}"\nhttp_headers = { Authorization = "Bearer ${token}" }`;return JSON.stringify({mcpServers:{study_os:agentClient==='claude'?{type:'http',url:agent.endpoint,headers}:{serverUrl:agent.endpoint,headers}}},null,2)}
+  const copyConfig=async()=>{try{await navigator.clipboard.writeText(configText());setCopied(true);setAgentMessage('Configuração copiada. Adicione-a ao arquivo MCP da ferramenta e reinicie a conexão.');window.setTimeout(()=>setCopied(false),1500)}catch{setAgentMessage('A cópia automática falhou. Selecione o texto de configuração e copie manualmente.')}}
 
   const change = (patch: Parameters<typeof update>[0]) => {
     update(patch)
@@ -146,6 +173,23 @@ export function SettingsView() {
                     </span>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><KeyRound className="size-4"/>Integrações de IA</CardTitle>
+                <CardDescription>Conecte Codex, Claude Code ou Antigravity ao Study/OS por MCP local. O app precisa estar aberto para o agente acessar seus estudos.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-5">
+                <div className="flex items-center justify-between gap-3 rounded-lg border p-3"><div><p className="text-sm font-medium">Acesso MCP local</p><p className="text-xs text-muted-foreground">Somente conexões locais autorizadas com token.</p></div><Switch checked={agent.enabled} onCheckedChange={(checked)=>void configureAgent(checked)} aria-label="Ativar integração MCP"/></div>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end"><div className="space-y-2"><Label htmlFor="agent-port">Porta local</Label><Input id="agent-port" type="number" min={1024} max={65535} value={portDraft} onChange={e=>setPortDraft(e.target.value)} disabled={!agent.enabled}/></div><Button variant="outline" onClick={()=>void saveAgentPort()} disabled={!agent.enabled||Number(portDraft)===agent.port}>Alterar porta</Button></div>
+                <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><div className="space-y-2"><Label htmlFor="agent-client">Ferramenta</Label><select id="agent-client" value={agentClient} onChange={e=>setAgentClient(e.target.value as typeof agentClient)} className="h-9 w-full rounded-md border bg-background px-3 text-sm"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="antigravity">Antigravity</option></select></div><div className="space-y-2"><Label>Servidor MCP</Label><code className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-xs">{agent.endpoint}</code></div><Button disabled={!agent.enabled} onClick={()=>void generateToken(agentClient)}><KeyRound className="size-4"/>Gerar token</Button></div>
+                {newTokens[agentClient]&&<div className="space-y-2"><Label>Token novo · aparece somente nesta sessão</Label><code className="block break-all rounded-lg border bg-muted/40 p-3 text-xs">{newTokens[agentClient]}</code><p className="text-xs text-muted-foreground">Criar um token novo revoga o anterior desta ferramenta.</p></div>}
+                <div className="space-y-2"><div className="flex items-center justify-between"><Label htmlFor="agent-config">Configuração do cliente</Label><Button size="sm" variant="outline" onClick={()=>void copyConfig()} disabled={!newTokens[agentClient]}>{copied?<Check className="size-4"/>:<Copy className="size-4"/>}Copiar</Button></div><Textarea id="agent-config" value={configText()} readOnly rows={agentClient==='codex'?3:8} className="font-mono text-xs"/><p className="text-xs text-muted-foreground">Cole no arquivo de configuração MCP da ferramenta. O agente conecta ao serviço do próprio app; nenhum login ou chave de API é solicitado pelo Study/OS.</p></div>
+                {agentTokens.length>0&&<div className="space-y-2"><Label>Acessos autorizados</Label>{agentTokens.map(item=><div key={item.client} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"><span className="text-sm capitalize">{item.client} · {new Date(item.created_at).toLocaleDateString(preferences.locale)}</span><Button size="sm" variant="ghost" className="text-destructive" onClick={()=>void revokeToken(item.client)}>Revogar</Button></div>)}</div>}
+                {pendingDeletes.length>0&&<div className="space-y-2"><Label>Exclusões aguardando sua decisão</Label>{pendingDeletes.map(item=><div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"><div className="min-w-0"><p className="text-sm font-medium">{item.summary}</p><p className="text-xs text-muted-foreground">{item.entity_type} · pedido por {item.client}</p></div><div className="flex gap-2"><Button size="sm" variant="outline" onClick={()=>void resolveDeletion(item.id,false)}>Rejeitar</Button><Button size="sm" variant="destructive" onClick={()=>void resolveDeletion(item.id,true)}>Excluir</Button></div></div>)}</div>}
+                {agentHistory.length>0&&<details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">Histórico recente ({agentHistory.length})</summary><div className="mt-3 max-h-52 space-y-2 overflow-auto">{agentHistory.map((item,index)=><div key={`${item.created_at}-${index}`} className="border-t pt-2"><p className="text-xs">{item.summary}</p><p className="mt-1 text-[10px] text-muted-foreground">{item.client} · {item.operation} · {new Date(item.created_at).toLocaleString(preferences.locale)}</p></div>)}</div></details>}
+                {agentMessage&&<p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground" role="status">{agentMessage}</p>}
               </CardContent>
             </Card>
           </div>

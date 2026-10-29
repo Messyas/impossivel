@@ -13,9 +13,15 @@ const MAX_CONTENT_BYTES: usize = 500_000;
 fn normalize_title(title: &str) -> Result<String, String> {
     let title = title.trim();
     if title.chars().count() > MAX_TITLE_CHARS {
-        return Err(format!("O título deve ter no máximo {MAX_TITLE_CHARS} caracteres."));
+        return Err(format!(
+            "O título deve ter no máximo {MAX_TITLE_CHARS} caracteres."
+        ));
     }
-    Ok(if title.is_empty() { "Sem título".into() } else { title.into() })
+    Ok(if title.is_empty() {
+        "Sem título".into()
+    } else {
+        title.into()
+    })
 }
 
 fn validate_content(content: &str) -> Result<(), String> {
@@ -26,7 +32,10 @@ fn validate_content(content: &str) -> Result<(), String> {
 }
 
 fn escape_like(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
 }
 
 #[tauri::command]
@@ -35,7 +44,11 @@ pub fn get_notes(
     query: Option<NotesQueryPayload>,
 ) -> Result<PaginatedResponse<Note>, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    let page = query.as_ref().and_then(|q| q.page).unwrap_or(1).clamp(1, 1_000_000);
+    let page = query
+        .as_ref()
+        .and_then(|q| q.page)
+        .unwrap_or(1)
+        .clamp(1, 1_000_000);
     let per_page = query
         .as_ref()
         .and_then(|q| q.per_page)
@@ -166,7 +179,8 @@ pub fn delete_note(db: State<'_, Database>, id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn clear_all_notes(db: State<'_, Database>) -> Result<usize, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM notes", []).map_err(|e| e.to_string())
+    conn.execute("DELETE FROM notes", [])
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

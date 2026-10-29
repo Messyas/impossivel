@@ -1,7 +1,8 @@
-pub mod tasks;
-pub mod roadmaps;
-pub mod notes;
 pub mod accounts;
-pub mod preferences;
-pub mod focus;
 pub mod analytics;
+pub mod focus;
+pub mod knowledge;
+pub mod notes;
+pub mod preferences;
+pub mod roadmaps;
+pub mod tasks;

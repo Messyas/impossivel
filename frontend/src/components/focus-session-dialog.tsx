@@ -30,6 +30,7 @@ export function FocusSessionDialog({
   checklistState,
   focusSeconds = 0,
   timerRemaining = 1500,
+  stepId,
   trigger,
   finishLabel = 'Terminar etapa',
   onSave,
@@ -42,6 +43,7 @@ export function FocusSessionDialog({
   checklistState: boolean[]
   focusSeconds?: number
   timerRemaining?: number
+  stepId?: string
   trigger: React.ReactElement
   finishLabel?: string
   onSave: (update: FocusSessionUpdate) => void | Promise<void>
@@ -52,6 +54,15 @@ export function FocusSessionDialog({
   const [seconds, setSeconds] = useState(timerRemaining || 1500)
   const [spent, setSpent] = useState(0)
   const [checks, setChecks] = useState(checklistState.length === checklist.length ? checklistState : checklist.map(() => false))
+
+  useEffect(() => {
+    if (!stepId) return
+    const openRequested = (event: Event) => {
+      if ((event as CustomEvent<{ stepId: string }>).detail?.stepId === stepId) setOpen(true)
+    }
+    window.addEventListener('study:open-step', openRequested)
+    return () => window.removeEventListener('study:open-step', openRequested)
+  }, [stepId])
 
   useEffect(() => {
     if (!open) return

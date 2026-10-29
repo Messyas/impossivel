@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ptBR } from 'date-fns/locale'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
-import { BookOpen, Check, Circle, Clock3, FilePlus2, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, StickyNote, Target, TimerReset, Trash2, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
+import { BookOpen, Check, Circle, Clock3, FilePlus2, Loader2, MoreHorizontal, Network, Pause, Play, Plus, RotateCcw, Search, StickyNote, Target, TimerReset, Trash2, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { type Note, type Roadmap, type Task } from '@/lib/study-data'
 import { useTasks, useRoadmaps, useNotes, useDashboardAnalytics } from '@/hooks/use-tauri-data'
 import { useTranslation } from '@/lib/i18n'
@@ -231,7 +231,8 @@ function TaskRow({
   </Card>
 }
 
-export function RoadmapsView({ onFocus }: { onFocus: (title:string,minutes?:number)=>void }) {
+export type KnowledgeActionPayload = { action:'add'|'view'; step:{id:string;title:string;description:string;source_roadmap_name:string;status:string;mastery:number} }
+export function RoadmapsView({ onFocus, onKnowledgeAction }: { onFocus: (title:string,minutes?:number)=>void; onKnowledgeAction:(payload:KnowledgeActionPayload)=>void }) {
   const { roadmaps: items, createRoadmap, updateRoadmap, updateStepProgress, deleteRoadmap, clearAllRoadmaps, loadingMore, hasMore, fetchNextPage } = useRoadmaps()
   const { t } = useTranslation()
   return <>
@@ -258,17 +259,18 @@ export function RoadmapsView({ onFocus }: { onFocus: (title:string,minutes?:numb
       }
     />
     <div className="flex flex-col gap-5">
-      {items.map(r => <RoadmapExecutionCard key={r._dbId ?? r.name} roadmap={r} onDelete={() => deleteRoadmap(r)} onEdit={updateRoadmap} onStepSave={updateStepProgress} />)}
+      {items.map(r => <RoadmapExecutionCard key={r._dbId ?? r.name} roadmap={r} onDelete={() => deleteRoadmap(r)} onEdit={updateRoadmap} onStepSave={updateStepProgress} onKnowledgeAction={onKnowledgeAction} />)}
     </div>
     <InfiniteScrollSentinel hasMore={hasMore} loading={loadingMore} onLoadMore={fetchNextPage} labelEnd="Todos os roadmaps foram carregados" />
   </>
 }
 
-function RoadmapExecutionCard({ roadmap: r, onDelete, onEdit, onStepSave }: {
+function RoadmapExecutionCard({ roadmap: r, onDelete, onEdit, onStepSave, onKnowledgeAction }: {
   roadmap: Roadmap
   onDelete: () => void
   onEdit: (roadmap: Roadmap) => void
   onStepSave: ReturnType<typeof useRoadmaps>['updateStepProgress']
+  onKnowledgeAction:(payload:KnowledgeActionPayload)=>void
 }) {
   const { t } = useTranslation()
   const completedSteps = r.steps.filter(step => step.status === 'done').length
@@ -306,7 +308,7 @@ function RoadmapExecutionCard({ roadmap: r, onDelete, onEdit, onStepSave }: {
                 <div><div className="truncate text-sm font-medium">{step.title}</div><div className="mt-1 text-xs text-muted-foreground">{statusLabel(normalizedStatus)}</div></div>
                 <Progress value={checks.length ? checkState.filter(Boolean).length * 100 / checks.length : 0} />
               </button>
-              return <div key={step._dbId ?? `${step.title}-${index}`} className="flex items-center"><FocusSessionDialog title={step.title} subtitle={`${r.name} · Etapa ${index + 1}`} description={step.description} status={normalizedStatus === 'locked' ? 'available' : normalizedStatus} checklist={checks} checklistState={checkState} focusSeconds={step.focusSeconds} timerRemaining={step.timerRemaining} trigger={trigger} onSave={update => onStepSave(step, update)} />{index < r.steps.length - 1 && <span aria-hidden="true" className="h-px w-6 shrink-0 bg-border" />}</div>
+              return <div key={step._dbId ?? `${step.title}-${index}`} className="flex items-center"><div className="flex flex-col gap-1"><FocusSessionDialog stepId={step._dbId} title={step.title} subtitle={`${r.name} · Etapa ${index + 1}`} description={step.description} status={normalizedStatus === 'locked' ? 'available' : normalizedStatus} checklist={checks} checklistState={checkState} focusSeconds={step.focusSeconds} timerRemaining={step.timerRemaining} trigger={trigger} onSave={update => onStepSave(step, update)} />{step._dbId&&<div className="flex justify-end gap-1"><Button size="icon-sm" variant="ghost" aria-label={`Adicionar ${step.title} ao mapa`} title="Adicionar ao mapa" onClick={()=>onKnowledgeAction({action:'add',step:{id:step._dbId!,title:step.title,description:step.description??'',source_roadmap_name:r.name,status:normalizedStatus,mastery:step.mastery??0}})}><Plus className="size-3.5"/></Button><Button size="icon-sm" variant="ghost" aria-label={`Ver conexões de ${step.title}`} title="Ver conexões" onClick={()=>onKnowledgeAction({action:'view',step:{id:step._dbId!,title:step.title,description:step.description??'',source_roadmap_name:r.name,status:normalizedStatus,mastery:step.mastery??0}})}><Network className="size-3.5"/></Button></div>}</div>{index < r.steps.length - 1 && <span aria-hidden="true" className="h-px w-6 shrink-0 bg-border" />}</div>
             })}
           </div>
         </div>

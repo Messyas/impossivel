@@ -32,11 +32,7 @@ pub fn update_analytics_internal(conn: &Connection) {
         1218
     };
 
-    let completed_sessions = if focus_count > 0 {
-        focus_count
-    } else {
-        27
-    };
+    let completed_sessions = if focus_count > 0 { focus_count } else { 27 };
 
     let _ = conn.execute(
         "UPDATE dashboard_analytics 
@@ -84,7 +80,9 @@ pub fn get_dashboard_analytics(db: State<'_, Database>) -> Result<DashboardAnaly
 }
 
 #[tauri::command]
-pub fn recalculate_dashboard_analytics(db: State<'_, Database>) -> Result<DashboardAnalytics, String> {
+pub fn recalculate_dashboard_analytics(
+    db: State<'_, Database>,
+) -> Result<DashboardAnalytics, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     update_analytics_internal(&conn);
     drop(conn);

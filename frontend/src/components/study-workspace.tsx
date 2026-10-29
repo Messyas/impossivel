@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
-import { BarChart3, BookOpen, CalendarDays, CheckSquare2, KeyRound, Pause, Play, RotateCcw, StickyNote } from 'lucide-react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { BarChart3, BookOpen, CalendarDays, CheckSquare2, KeyRound, Pause, Play, RotateCcw, StickyNote, Network } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CalendarView, DashboardView, NotesView, RoadmapsView, TodoView } from '@/components/study-views'
+import { CalendarView, DashboardView, NotesView, RoadmapsView, TodoView, type KnowledgeActionPayload } from '@/components/study-views'
+const KnowledgeView = lazy(() => import('@/components/knowledge-view').then(module => ({ default: module.KnowledgeView })))
 import { AccountsView } from '@/components/accounts-view'
 import { SettingsView } from '@/components/settings-view'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -12,13 +13,14 @@ import { useTranslation, type TranslationKey } from '@/lib/i18n'
 import { AnimatedIcon } from '@/components/ui/animated-icon'
 import { WindowControls } from '@/components/ui/window-controls'
 
-const nav: { id: 'todo' | 'roadmaps' | 'calendar' | 'notes' | 'accounts' | 'dashboard'; labelKey: TranslationKey; icon: typeof CheckSquare2 }[] = [
+const nav: { id: 'todo' | 'roadmaps' | 'calendar' | 'notes' | 'accounts' | 'dashboard' | 'knowledge'; labelKey: TranslationKey; icon: typeof CheckSquare2 }[] = [
   { id: 'todo', labelKey: 'nav.todo', icon: CheckSquare2 },
   { id: 'roadmaps', labelKey: 'nav.roadmaps', icon: BookOpen },
   { id: 'calendar', labelKey: 'nav.calendar', icon: CalendarDays },
   { id: 'notes', labelKey: 'nav.notes', icon: StickyNote },
   { id: 'accounts', labelKey: 'nav.accounts', icon: KeyRound },
   { id: 'dashboard', labelKey: 'nav.dashboard', icon: BarChart3 },
+  { id: 'knowledge', labelKey: 'nav.knowledge', icon: Network },
 ]
 
 export type ViewId = (typeof nav)[number]['id'] | 'settings'
@@ -34,6 +36,7 @@ function ViewPanel({ id, activeView, children }: { id: ViewId; activeView: ViewI
 
 export function StudyWorkspace() {
   const [view, setView] = useState<ViewId>('todo')
+  const [knowledgeAction,setKnowledgeAction]=useState<KnowledgeActionPayload|null>(null)
   const [seconds, setSeconds] = useState(25 * 60)
   const [running, setRunning] = useState(false)
   const [focus, setFocus] = useState('Exercícios de derivadas')
@@ -131,11 +134,12 @@ export function StudyWorkspace() {
     </header>
     <div className="w-full min-w-0 px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       <ViewPanel id="todo" activeView={view}><TodoView onFocus={startFocus} activeFocus={{ title: focus, seconds, running, toggleRunning: () => setRunning(v => !v) }} /></ViewPanel>
-      <ViewPanel id="roadmaps" activeView={view}><RoadmapsView onFocus={startFocus} /></ViewPanel>
+      <ViewPanel id="roadmaps" activeView={view}><RoadmapsView onFocus={startFocus} onKnowledgeAction={payload=>{setKnowledgeAction(payload);setView('knowledge')}} /></ViewPanel>
       <ViewPanel id="calendar" activeView={view}><CalendarView onFocus={startFocus} /></ViewPanel>
       <ViewPanel id="notes" activeView={view}><NotesView /></ViewPanel>
       <ViewPanel id="accounts" activeView={view}><AccountsView /></ViewPanel>
       <ViewPanel id="dashboard" activeView={view}><DashboardView /></ViewPanel>
+      <ViewPanel id="knowledge" activeView={view}><Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Carregando mapa de conhecimento…</div>}><KnowledgeView pendingAction={knowledgeAction} onActionComplete={()=>setKnowledgeAction(null)} onOpenStep={(stepId) => { setView('roadmaps'); window.dispatchEvent(new CustomEvent('study:open-step', { detail: { stepId } })) }} /></Suspense></ViewPanel>
       <ViewPanel id="settings" activeView={view}><SettingsView /></ViewPanel>
     </div>
   </main>

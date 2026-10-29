@@ -1,11 +1,14 @@
+use crate::commands::analytics::update_analytics_internal;
+use crate::db::Database;
+use crate::models::{DailyFocus, FocusSessionPayload, FocusStats};
 use tauri::State;
 use uuid::Uuid;
-use crate::db::Database;
-use crate::models::{FocusSessionPayload, FocusStats, DailyFocus};
-use crate::commands::analytics::update_analytics_internal;
 
 #[tauri::command]
-pub fn log_focus_session(db: State<'_, Database>, payload: FocusSessionPayload) -> Result<(), String> {
+pub fn log_focus_session(
+    db: State<'_, Database>,
+    payload: FocusSessionPayload,
+) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let id = Uuid::new_v4().to_string();
     let completed = payload.completed.unwrap_or(true) as i64;

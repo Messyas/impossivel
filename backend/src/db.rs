@@ -1,9 +1,11 @@
 use rusqlite::{Connection, Result as SqlResult};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::Mutex;
 
+#[derive(Clone)]
 pub struct Database {
-    pub conn: Mutex<Connection>,
+    pub conn: Arc<Mutex<Connection>>,
 }
 
 pub fn get_db_dir() -> PathBuf {
@@ -24,11 +26,11 @@ pub fn init_database() -> SqlResult<Database> {
     run_migrations(&conn)?;
 
     Ok(Database {
-        conn: Mutex::new(conn),
+        conn: Arc::new(Mutex::new(conn)),
     })
 }
 
-fn run_migrations(conn: &Connection) -> SqlResult<()> {
+pub(crate) fn run_migrations(conn: &Connection) -> SqlResult<()> {
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS preferences (
@@ -57,6 +59,7 @@ fn run_migrations(conn: &Connection) -> SqlResult<()> {
         CREATE TABLE IF NOT EXISTS roadmaps (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
             code TEXT NOT NULL,
             progress INTEGER NOT NULL DEFAULT 0,
             hours REAL NOT NULL DEFAULT 0,
@@ -85,6 +88,138 @@ fn run_migrations(conn: &Connection) -> SqlResult<()> {
         );
 
         CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS knowledge_maps (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            viewport_json TEXT NOT NULL DEFAULT '{"x":0,"y":0,"zoom":1}',
+            revision INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS knowledge_nodes (
+            id TEXT PRIMARY KEY,
+            map_id TEXT NOT NULL REFERENCES knowledge_maps(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL CHECK(kind IN ('concept','roadmap_step')),
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            roadmap_step_id TEXT REFERENCES roadmap_steps(id) ON DELETE SET NULL,
+            source_roadmap_name TEXT,
+            position_x REAL NOT NULL DEFAULT 0,
+            position_y REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(map_id, roadmap_step_id)
+        );
+        CREATE TABLE IF NOT EXISTS knowledge_edges (
+            id TEXT PRIMARY KEY,
+            map_id TEXT NOT NULL REFERENCES knowledge_maps(id) ON DELETE CASCADE,
+            source_id TEXT NOT NULL REFERENCES knowledge_nodes(id) ON DELETE CASCADE,
+            target_id TEXT NOT NULL REFERENCES knowledge_nodes(id) ON DELETE CASCADE,
+            relation TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            CHECK(source_id != target_id),
+            UNIQUE(map_id, source_id, target_id, relation)
+        );
+        CREATE TABLE IF NOT EXISTS study_task_links (
+            task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+            roadmap_step_id TEXT REFERENCES roadmap_steps(id) ON DELETE SET NULL
+        );
+        CREATE TABLE IF NOT EXISTS knowledge_note_links (
+            note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+            target_kind TEXT NOT NULL CHECK(target_kind IN ('roadmap_step','knowledge_node','knowledge_edge')),
+            target_id TEXT NOT NULL,
+            PRIMARY KEY(note_id, target_kind, target_id)
+        );
+        CREATE TABLE IF NOT EXISTS agent_tokens (
+            client TEXT PRIMARY KEY,
+            token_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS agent_change_log (
+            id TEXT PRIMARY KEY,
+            client TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS agent_operations (
+            operation_id TEXT PRIMARY KEY,
+            client TEXT NOT NULL,
+            result TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS entity_revisions (
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            revision INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY(entity_type,entity_id)
+        );
+        CREATE TRIGGER IF NOT EXISTS revision_roadmap_insert AFTER INSERT ON roadmaps BEGIN
+            INSERT INTO entity_revisions(entity_type,entity_id,revision) VALUES('roadmap',NEW.id,1) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=revision+1;
+        END;
+        CREATE TRIGGER IF NOT EXISTS revision_roadmap_update AFTER UPDATE ON roadmaps BEGIN
+            INSERT INTO entity_revisions(entity_type,entity_id,revision) VALUES('roadmap',NEW.id,1) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=revision+1;
+        END;
+        CREATE TRIGGER IF NOT EXISTS revision_step_insert AFTER INSERT ON roadmap_steps BEGIN
+            INSERT INTO entity_revisions(entity_type,entity_id,revision) VALUES('roadmap_step',NEW.id,1) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=revision+1;
+        END;
+        CREATE TRIGGER IF NOT EXISTS revision_step_update AFTER UPDATE ON roadmap_steps BEGIN
+            INSERT INTO entity_revisions(entity_type,entity_id,revision) VALUES('roadmap_step',NEW.id,1) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=revision+1;
+        END;
+        CREATE TRIGGER IF NOT EXISTS revision_task_insert AFTER INSERT ON tasks BEGIN
+            INSERT INTO entity_revisions(entity_type,entity_id,revision) VALUES('task',NEW.id,1) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=revision+1;
+        END;
+        CREATE TRIGGER IF NOT EXISTS revision_task_update AFTER UPDATE ON tasks BEGIN
+            INSERT INTO entity_revisions(entity_type,entity_id,revision) VALUES('task',NEW.id,1) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=revision+1;
+        END;
+        CREATE TRIGGER IF NOT EXISTS revision_note_insert AFTER INSERT ON notes BEGIN
+            INSERT INTO entity_revisions(entity_type,entity_id,revision) VALUES('note',NEW.id,1) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=revision+1;
+        END;
+        CREATE TRIGGER IF NOT EXISTS revision_note_update AFTER UPDATE ON notes BEGIN
+            INSERT INTO entity_revisions(entity_type,entity_id,revision) VALUES('note',NEW.id,1) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=revision+1;
+        END;
+        CREATE TABLE IF NOT EXISTS pending_deletions (
+            id TEXT PRIMARY KEY,
+            client TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TRIGGER IF NOT EXISTS keep_knowledge_snapshot_before_step_delete
+        BEFORE DELETE ON roadmap_steps BEGIN
+            UPDATE knowledge_nodes SET kind='concept',roadmap_step_id=NULL,
+              title=OLD.title,description=OLD.description,
+              source_roadmap_name=COALESCE((SELECT name FROM roadmaps WHERE id=OLD.roadmap_id),source_roadmap_name)
+            WHERE roadmap_step_id=OLD.id;
+        END;
+        DROP TRIGGER IF EXISTS snapshot_knowledge_roadmap_before_delete;
+        CREATE TRIGGER snapshot_knowledge_roadmap_before_delete
+        BEFORE DELETE ON roadmaps BEGIN
+            UPDATE knowledge_nodes SET source_roadmap_name=OLD.name
+            WHERE roadmap_step_id IN (SELECT id FROM roadmap_steps WHERE roadmap_id=OLD.id);
+        END;
+        CREATE TRIGGER IF NOT EXISTS sync_knowledge_step_snapshot
+        AFTER UPDATE OF title,description ON roadmap_steps BEGIN
+            UPDATE knowledge_nodes SET title=NEW.title,description=NEW.description
+            WHERE roadmap_step_id=NEW.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS sync_knowledge_roadmap_snapshot
+        AFTER UPDATE OF name ON roadmaps BEGIN
+            UPDATE knowledge_nodes SET source_roadmap_name=NEW.name
+            WHERE roadmap_step_id IN (SELECT id FROM roadmap_steps WHERE roadmap_id=NEW.id);
+        END;
+        DROP TRIGGER IF EXISTS remove_knowledge_on_map_delete;
+        CREATE TRIGGER remove_knowledge_on_map_delete
+        AFTER DELETE ON knowledge_maps BEGIN
+            DELETE FROM knowledge_note_links WHERE target_kind='knowledge_node' AND target_id IN (SELECT id FROM knowledge_nodes WHERE map_id=OLD.id);
+            DELETE FROM knowledge_note_links WHERE target_kind='knowledge_edge' AND target_id IN (SELECT id FROM knowledge_edges WHERE map_id=OLD.id);
+            DELETE FROM knowledge_edges WHERE map_id=OLD.id;
+            DELETE FROM knowledge_nodes WHERE map_id=OLD.id;
+        END;
 
         CREATE TABLE IF NOT EXISTS accounts (
             id TEXT PRIMARY KEY,
@@ -141,6 +276,7 @@ fn run_migrations(conn: &Connection) -> SqlResult<()> {
     // SQLite does not support `ADD COLUMN IF NOT EXISTS`, so duplicate-column
     // errors are intentionally ignored to keep startup migrations idempotent.
     for migration in [
+        "ALTER TABLE roadmaps ADD COLUMN description TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE roadmaps ADD COLUMN review_intervals TEXT NOT NULL DEFAULT '[0,1,3,7]'",
         "ALTER TABLE roadmap_steps ADD COLUMN description TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE roadmap_steps ADD COLUMN checklist TEXT NOT NULL DEFAULT '[\"Compreender os conceitos fundamentais\"]'",
@@ -200,6 +336,15 @@ fn run_migrations(conn: &Connection) -> SqlResult<()> {
         "#,
     )?;
 
+    conn.execute_batch(
+        r#"
+        INSERT OR IGNORE INTO entity_revisions(entity_type,entity_id,revision) SELECT 'roadmap',id,1 FROM roadmaps;
+        INSERT OR IGNORE INTO entity_revisions(entity_type,entity_id,revision) SELECT 'roadmap_step',id,1 FROM roadmap_steps;
+        INSERT OR IGNORE INTO entity_revisions(entity_type,entity_id,revision) SELECT 'task',id,1 FROM tasks;
+        INSERT OR IGNORE INTO entity_revisions(entity_type,entity_id,revision) SELECT 'note',id,1 FROM notes;
+        "#,
+    )?;
+
     Ok(())
 }
 
@@ -235,9 +380,26 @@ fn seed_if_empty(conn: &Connection) -> SqlResult<()> {
 
     // Seed 120+ Tasks
     let groups = ["Hoje", "Próximas"];
-    let subjects = ["Cálculo", "Rust", "Inglês", "Física", "Algoritmos", "Sistemas", "Redes", "IA"];
+    let subjects = [
+        "Cálculo",
+        "Rust",
+        "Inglês",
+        "Física",
+        "Algoritmos",
+        "Sistemas",
+        "Redes",
+        "IA",
+    ];
     let priorities = ["Alta", "Média", "Baixa"];
-    let dues = ["10:00", "14:30", "18:00", "Amanhã", "Qui, 21", "Sex, 22", "Próx. semana"];
+    let dues = [
+        "10:00",
+        "14:30",
+        "18:00",
+        "Amanhã",
+        "Qui, 21",
+        "Sex, 22",
+        "Próx. semana",
+    ];
 
     let tx = conn.unchecked_transaction()?;
     {
@@ -257,7 +419,17 @@ fn seed_if_empty(conn: &Connection) -> SqlResult<()> {
             let due = dues[i % dues.len()];
             let time_offset = format!("-{} minutes", (125 - i) * 10);
 
-            stmt.execute(rusqlite::params![id, title, group, subj, duration, priority, done, due, time_offset])?;
+            stmt.execute(rusqlite::params![
+                id,
+                title,
+                group,
+                subj,
+                duration,
+                priority,
+                done,
+                due,
+                time_offset
+            ])?;
         }
     }
 
@@ -273,8 +445,16 @@ fn seed_if_empty(conn: &Connection) -> SqlResult<()> {
         )?;
 
         let roadmap_names = [
-            "Cálculo I", "Rust", "English C1", "Física I", "Estrutura de Dados", 
-            "Web Architecture", "DevOps & Cloud", "Machine Learning", "Mobile React Native", "Design Systems"
+            "Cálculo I",
+            "Rust",
+            "English C1",
+            "Física I",
+            "Estrutura de Dados",
+            "Web Architecture",
+            "DevOps & Cloud",
+            "Machine Learning",
+            "Mobile React Native",
+            "Design Systems",
         ];
 
         for i in 1..=55 {
@@ -288,22 +468,63 @@ fn seed_if_empty(conn: &Connection) -> SqlResult<()> {
             let next_step = format!("Etapa Avançada #{:02}", (i % 5) + 1);
             let time_offset = format!("-{} hours", (55 - i) * 4);
 
-            rm_stmt.execute(rusqlite::params![rm_id, name, code, progress, hours, streak, next_step, time_offset])?;
+            rm_stmt.execute(rusqlite::params![
+                rm_id,
+                name,
+                code,
+                progress,
+                hours,
+                streak,
+                next_step,
+                time_offset
+            ])?;
 
             for s in 0..5 {
                 let step_id = format!("s_{:03}_{}", i, s + 1);
                 let step_title = format!("Conceito Fundamentação #{:02}.{}", i, s + 1);
-                let status = if s < 2 { "done" } else if s == 2 { "active" } else { "locked" };
-                let mastery = if s < 2 { 90 - s * 10 } else if s == 2 { 50 } else { 0 };
-                step_stmt.execute(rusqlite::params![step_id, rm_id, step_title, status, mastery, s as i64])?;
+                let status = if s < 2 {
+                    "done"
+                } else if s == 2 {
+                    "active"
+                } else {
+                    "locked"
+                };
+                let mastery = if s < 2 {
+                    90 - s * 10
+                } else if s == 2 {
+                    50
+                } else {
+                    0
+                };
+                step_stmt.execute(rusqlite::params![
+                    step_id, rm_id, step_title, status, mastery, s as i64
+                ])?;
             }
         }
     }
 
     // Seed 100+ Accounts & Encrypted Credentials
     {
-        let services = ["OpenAI", "Anthropic", "Google Cloud", "Groq", "GitHub", "Vercel", "AWS", "Cloudflare", "Supabase", "DigitalOcean"];
-        let purposes = ["Main", "Personal", "Development", "Testing", "Backup", "Free Tier"];
+        let services = [
+            "OpenAI",
+            "Anthropic",
+            "Google Cloud",
+            "Groq",
+            "GitHub",
+            "Vercel",
+            "AWS",
+            "Cloudflare",
+            "Supabase",
+            "DigitalOcean",
+        ];
+        let purposes = [
+            "Main",
+            "Personal",
+            "Development",
+            "Testing",
+            "Backup",
+            "Free Tier",
+        ];
         let statuses = ["Active", "Backup", "Inactive"];
         let tiers = ["Available", "Exhausted", "N/A"];
 
@@ -335,7 +556,21 @@ fn seed_if_empty(conn: &Connection) -> SqlResult<()> {
             let time_offset = format!("-{} minutes", (105 - i) * 15);
 
             acc_stmt.execute(rusqlite::params![
-                acc_id, service, label, email, username, purpose, status, free_tier, last_used, plan, in_use, notes, tags, credits, time_offset
+                acc_id,
+                service,
+                label,
+                email,
+                username,
+                purpose,
+                status,
+                free_tier,
+                last_used,
+                plan,
+                in_use,
+                notes,
+                tags,
+                credits,
+                time_offset
             ])?;
 
             // Insert 1 API Key credential per account
@@ -343,7 +578,14 @@ fn seed_if_empty(conn: &Connection) -> SqlResult<()> {
             let cred_label = format!("API Key Principal #{:02}", i);
             let dummy_secret = vec![0u8; 32];
             let dummy_nonce = vec![0u8; 12];
-            cred_stmt.execute(rusqlite::params![cred_id, acc_id, cred_label, "API Key", dummy_secret, dummy_nonce])?;
+            cred_stmt.execute(rusqlite::params![
+                cred_id,
+                acc_id,
+                cred_label,
+                "API Key",
+                dummy_secret,
+                dummy_nonce
+            ])?;
         }
     }
 
@@ -397,5 +639,59 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count_after_restart, 0);
+    }
+
+    #[test]
+    fn deleting_a_roadmap_preserves_map_concepts_and_unlinks_tasks() {
+        let connection = Connection::open_in_memory().unwrap();
+        run_migrations(&connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO roadmaps(id,name,code) VALUES('roadmap-x','Rust','RX')",
+                [],
+            )
+            .unwrap();
+        connection.execute("INSERT INTO roadmap_steps(id,roadmap_id,title,description,status) VALUES('step-x','roadmap-x','Ownership','Borrowing rules','available')", []).unwrap();
+        connection
+            .execute(
+                "INSERT INTO knowledge_maps(id,name) VALUES('map-x','Rust concepts')",
+                [],
+            )
+            .unwrap();
+        connection.execute("INSERT INTO knowledge_nodes(id,map_id,kind,title,description,roadmap_step_id,source_roadmap_name) VALUES('node-x','map-x','roadmap_step','Ownership','Borrowing rules','step-x','Rust')", []).unwrap();
+        connection
+            .execute(
+                "INSERT INTO tasks(id,title) VALUES('task-x','Practice borrowing')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO study_task_links(task_id,roadmap_step_id) VALUES('task-x','step-x')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute("DELETE FROM roadmaps WHERE id='roadmap-x'", [])
+            .unwrap();
+        let node: (String, Option<String>, String, String, Option<String>) = connection.query_row("SELECT kind,roadmap_step_id,title,description,source_roadmap_name FROM knowledge_nodes WHERE id='node-x'", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).unwrap();
+        assert_eq!(
+            node,
+            (
+                "concept".into(),
+                None,
+                "Ownership".into(),
+                "Borrowing rules".into(),
+                Some("Rust".into())
+            )
+        );
+        let linked_step: Option<String> = connection
+            .query_row(
+                "SELECT roadmap_step_id FROM study_task_links WHERE task_id='task-x'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(linked_step, None);
     }
 }

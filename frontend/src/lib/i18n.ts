@@ -10,6 +10,7 @@ const ptBR = {
   'nav.notes': 'Notas',
   'nav.accounts': 'Contas',
   'nav.dashboard': 'Desempenho',
+  'nav.knowledge': 'Conhecimento',
   'nav.settings': 'Configurações',
 
   // Header / Timer
@@ -185,6 +186,7 @@ const enUS: typeof ptBR = {
   'nav.notes': 'Notes',
   'nav.accounts': 'Accounts',
   'nav.dashboard': 'Dashboard',
+  'nav.knowledge': 'Knowledge',
   'nav.settings': 'Settings',
 
   // Header / Timer
